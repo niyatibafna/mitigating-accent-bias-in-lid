@@ -1,0 +1,9 @@
+speechbrain/
+*.wav
+qsub_logs/*
+prelim_evals/tmp/*
+playground/*
+prelim_evals/*.mp3
+prelim_evals/.ipynb_checkpoints/*
+prelim_evals/preds/*
+misc/*
