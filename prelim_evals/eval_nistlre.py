@@ -10,7 +10,7 @@ from speechbrain.inference.classifiers import EncoderClassifier
 from lhotse import Recording, MonoCut
 
 
-def load_nistlre(num_samples = None):
+def load_nistlre(per_accent = None):
     accents = {
         "ara-apc",
         "ara-acm",
@@ -35,11 +35,14 @@ def load_nistlre(num_samples = None):
         "eng-iaf",
         "fra-ntf",
     }
+    per_accent_num_samples = dict()
     all_data = []
     with open("/exp/jvillalba/corpora/LDC2022E16_2017_NIST_Language_Recognition_Evaluation_Training_and_Development_Sets/docs/train_info.tab") as f:
         for line in f:
             accent, path = line.strip().split()[0], line.strip().split()[1]
             if accent.strip() not in accents:
+                continue
+            if per_accent_num_samples.get(accent.strip(), 0) >= per_accent:
                 continue
             data_path = "/exp/jvillalba/corpora/LDC2022E16_2017_NIST_Language_Recognition_Evaluation_Training_and_Development_Sets/data/train/"
             filepath = f"{data_path}{accent.strip()}/{path.strip()}"
@@ -54,32 +57,25 @@ def load_nistlre(num_samples = None):
             for i in range(0, len(segment), K*16000):
                 if i+K*16000 > len(segment):
                     break
+                if per_accent_num_samples.get(accent.strip(), 0) >= per_accent:
+                    break
                 all_data.append({"signal": segment[i:i+K*16000], "lang": accent})
+                per_accent_num_samples[accent.strip()] = per_accent_num_samples.get(accent.strip(), 0) + 1
+                
 
-        # segment = segment[:10*16000]
-        # lang = speaker2lang[line["speaker"]]
-        # all_data.append({"signal": segment, "lang": lang})
+            print(f"Loaded {len(all_data)} segments")
 
-        # if len(all_data)%10 == 0:
-        #     print(f"Printing out sample")
-        #     print(f"Lang: {lang}")
-        #     print(f"Speaker: {line['speaker']}")
-        #     print(f"Start and end times: {line['start_time']}, {line['end_time']}")
-        #     print(f"Expected length: {int((line['end_time']-line['start_time'])*sr)}")
-        #     print(f"Length of audio: {segment.shape}")
     
     print(f"Loaded {len(all_data)} segments")
     print(f"Sample: {all_data[0]}")
     all_langs = set([f["lang"] for f in all_data])
     print(f"Languages: {all_langs}")
 
-    if num_samples is not None:
-        all_data = random.sample(all_data, min(len(all_data), num_samples))
     all_data = {"signal": [f["signal"] for f in all_data], "lang": [f["lang"] for f in all_data]}
     
     return Dataset.from_dict(all_data)
 
-dataset = load_nistlre(num_samples=100)
+dataset = load_nistlre(per_accent=1000)
 preds = defaultdict(lambda: defaultdict(int))
 
 print(f"Dataset size: {len(dataset)}")

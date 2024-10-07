@@ -1,4 +1,4 @@
-import os, sys, csv
+import os, sys, csv, json
 import random
 from collections import defaultdict
 from pandas import DataFrame as df
@@ -6,7 +6,6 @@ import torch
 import torchaudio
 from datasets import Dataset
 from speechbrain.inference.classifiers import EncoderClassifier
-from pydub import AudioSegment
 
 
 # wav_file = "/exp/nbafna/data/l2_arctic/l2arctic_release_v5/ABA/wav/arctic_a0001.wav"
@@ -34,7 +33,8 @@ def stm_reader(stm_path):
     return stm_data
 
 def load_edacc(num_samples = None):
-    stm_path = "/exp/nbafna/data/edacc/edacc_v1.0/test/stm"
+    test_stm_path = "/exp/nbafna/data/edacc/edacc_v1.0/test/stm"
+    dev_stm_path = "/exp/nbafna/data/edacc/edacc_v1.0/dev/stm"
     data_path = "/exp/nbafna/data/edacc/edacc_v1.0/data"
 
     audio_files = {}
@@ -45,15 +45,19 @@ def load_edacc(num_samples = None):
     print(f"Loaded {len(audio_files)} audio files")
 
     speaker2lang = {}
-    linguistic_background = "/exp/nbafna/data/edacc/edacc_v1.0/linguistic_background.csv"
-    with open(linguistic_background, "r") as f:
-        reader = csv.reader(f)
-        for row in reader:
-            speaker2lang[row[1]] = row[12]
+    # linguistic_background = "/exp/nbafna/data/edacc/edacc_v1.0/linguistic_background.csv"
+    # with open(linguistic_background, "r") as f:
+    #     reader = csv.reader(f)
+    #     for row in reader:
+    #         speaker2lang[row[1]] = row[12]
+    participant2accent_path = "/exp/nbafna/data/edacc/edacc_v1.0/participant2accent.json"
+    with open(participant2accent_path, "r") as f:
+        speaker2lang = json.load(f)
     print(f"Recorded {len(speaker2lang)} speakers")
 
     all_data = []
-    for line in stm_reader(stm_path):
+    stm_data = stm_reader(test_stm_path) + stm_reader(dev_stm_path)
+    for line in stm_data:
         audio_file = line["audio_file"]
         signal = audio_files[audio_file]
         signal = signal.squeeze().numpy()
