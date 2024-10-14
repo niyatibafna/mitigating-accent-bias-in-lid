@@ -8,3 +8,6 @@ prelim_evals/.ipynb_checkpoints/*
 prelim_evals/preds/*
 misc/*
 prelim_evals/results*
+tmp/
+outputs/*
+representation_space/outputs/*
