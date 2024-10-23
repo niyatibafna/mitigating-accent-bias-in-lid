@@ -11,3 +11,4 @@ prelim_evals/results*
 tmp/
 outputs/*
 representation_space/outputs/*
+representation_space/accent_subspaces_outputs/*

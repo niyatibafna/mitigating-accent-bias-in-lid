@@ -33,10 +33,8 @@ def load_cv(per_accent = None):
         if accent not in files:
             continue
         random.shuffle(files[accent])
-        if per_accent is not None:
-            files[accent] = files[accent][:per_accent]
-
-    print(files)
+        
+    # print(files)
     print("Loading audio files...")
     data = []
     clips_folder = "/export/common/data/corpora/ASR/commonvoice/en/clips/"
@@ -49,28 +47,37 @@ def load_cv(per_accent = None):
             for i in range(0, len(signal), K*16000):
                 if i+K*16000 > len(signal):
                     break
-                data.append({"signal": signal[i:i+K*16000], "lang": accent})
+                data.append({"signal": signal[i:i+K*16000], "lang": accent, "filename": os.path.join(clips_folder, audio)})
+            if per_accent and len(data) >= per_accent:
+                break
 
 
-    data = {"signal": [f["signal"] for f in data], "lang": [f["lang"] for f in data]}
+    data = {"signal": [f["signal"] for f in data], "lang": [f["lang"] for f in data], "filename": [f["filename"] for f in data]}
     return Dataset.from_dict(data)
         
-
-preds = defaultdict(lambda: defaultdict(int))
-dataset = load_cv(per_accent=1000)
+dataset = load_cv(per_accent = 5000)
 
 print(f"Dataset size: {len(dataset)}")
+batch_size = 32
 
-batch_size = 16
+preds = defaultdict(lambda: defaultdict(int))
+preds_record = []
 for data in dataset.iter(batch_size = batch_size):
     signals = torch.stack([torch.tensor(signal) for signal in data["signal"]])
     predictions = language_id.classify_batch(signals)
-    for lang, prediction in zip(data["lang"], predictions[3]):
+    for lang, filename, prediction in zip(data["lang"], data["filename"], predictions[3]):
         preds[lang][prediction] += 1
+        correct_lang = "en: English"
+        preds_record.append({"lang": lang, "filename": filename, "prediction": prediction, "misclassified": prediction != correct_lang})
+    
 
 preds_df = df(preds)
 print(preds_df)
-preds_df.to_csv("cv.csv")
+preds_df.to_csv("cv_accents_confusion_matrix.csv")
+preds_record_df = df(preds_record)
+print(preds_record_df)
+preds_record_df.to_csv("cv_accents-predictions.csv")
+
 
 # Print accuracy for each L2 accent and speaker
 for lang in preds:
