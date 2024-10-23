@@ -12,3 +12,4 @@ tmp/
 outputs/*
 representation_space/outputs/*
 representation_space/accent_subspaces_outputs/*
+representation_space/heatmap_from_csv.py
