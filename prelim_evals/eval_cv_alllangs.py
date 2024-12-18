@@ -78,9 +78,9 @@ def load_cv_langs(per_lang=None):
                 if en_accent:
                     lang = f"en_{en_accent}"
                 data.append({"signal": signal[i:i+K*16000], "lang": lang, "filename": filename})
-                if per_lang is not None and len(data) >= per_lang:
-                    break
-    
+            if per_lang is not None and len(data) >= per_lang:
+                break
+
         print(f"Loaded {len(data)} samples in total.")
 
     data = {"signal": [f["signal"] for f in data], "lang": [f["lang"] for f in data], "filename": [f["filename"] for f in data]}

@@ -13,3 +13,10 @@ outputs/*
 representation_space/outputs/*
 representation_space/accent_subspaces_outputs/*
 representation_space/heatmap_from_csv.py
+wandb/*
+*pycache*
+.vscode/*
+packages.txt
+lid_with_ssl_units/train_logs/*
+core*
+lid_with_ssl_units/pooled_codevectors.png
