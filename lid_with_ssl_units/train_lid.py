@@ -27,7 +27,13 @@ import logging
 from argparse import ArgumentParser
 
 sys.path.append("/home/hltcoe/nbafna/projects/mitigating-accent-bias-in-lid/")
-from lid_with_ssl_units.extracting_units_from_training_data import load_vl107_all_langs, load_vl107_lang, prepare_dataset, collate_fn, extract_embeddings, extract_phoneme_segment_embeddings, compute_kmeans_reps
+from lid_with_ssl_units.extracting_units_from_training_data import prepare_dataset, extract_embeddings, extract_phoneme_segment_embeddings, compute_kmeans_reps
+from lid_with_ssl_units.extracting_units_from_training_data import collate_fn as collate_fn_for_extracting_units
+sys.path.append("/home/hltcoe/nbafna/projects/mitigating-accent-bias-in-lid/utils/dataloading/")
+from dataset_loader import load_lid_dataset
+from vl107 import load_vl107
+from edacc import load_edacc
+
 
 random.seed(42)
 
@@ -98,6 +104,10 @@ class LinearClassifiereonAttentionLayersModel(torch.nn.Module):
         super(LinearClassifiereonAttentionLayersModel, self).__init__()
         # Model architecture: input --> linear --> relu --> cnn (seq_len reduced by half) --> relu --> attention layers (2) --> linear
         
+        self.hidden_size = hidden_size
+        self.num_attention_layers = num_attention_layers
+        self.attention_dim = attention_dim
+
         self.linear_input = torch.nn.Linear(hidden_size, attention_dim)
 
         self.relu = torch.nn.ReLU()
@@ -196,19 +206,24 @@ class PostEncoder:
         test_loader = DataLoader(test_dataset, batch_size=self.batch_size, shuffle=False, collate_fn=collate_fn)
         self.model.eval()
         all_preds = []
+        all_labels = []
+        all_accents = []
         for batch in test_loader:
             input_values = batch["input_values"].cuda()
             with torch.no_grad():
                 outputs = self.model(input_values)
                 preds = torch.argmax(outputs, dim=1)
                 all_preds.append(preds)
-        return torch.cat(all_preds)
+                all_labels.append(batch["labels"])
+                all_accents.extend(batch["accents"])
+        return torch.cat(all_preds), torch.cat(all_labels), all_accents
 
 
     def evaluate(self, test_dataset, collate_fn):
-        preds = self.predict(test_dataset)
-        labels = torch.cat([batch["labels"] for batch in DataLoader(test_dataset, batch_size=self.batch_size, shuffle=False, collate_fn=collate_fn)]).cuda()
+        preds, labels, accents = self.predict(test_dataset)
 
+        preds = preds.cpu()
+        labels = labels.cpu()
         ###### DEBUG ######
         # logger.info(f"Number of samples: {len(labels)}")
         # logger.info(f"preds: {preds}")
@@ -217,7 +232,7 @@ class PostEncoder:
         correct = (preds == labels).sum().item()
         total = len(labels)
         logger.info(f"Accuracy: {correct/total}")
-        return preds, labels, correct/total
+        return preds, labels, accents, correct/total
     
     def save(self, model_filename):
         torch.save(self.model, os.path.join(self.output_dir, model_filename))
@@ -311,6 +326,7 @@ class LinearClassifiereonAttentionLayers(PostEncoder):
             model = LinearClassifiereonAttentionLayersModel(num_classes=num_classes, hidden_size=hidden_size, \
                                                             num_attention_layers=num_attention_layers, \
                                                             attention_dim=attention_dim)
+        
         self.model = model.cuda()
 
         super().__init__(load_from_dir, output_dir, batch_size, lr, num_epochs)
@@ -334,7 +350,7 @@ class LinearClassifiereonAttentionLayers(PostEncoder):
         return super().evaluate(test_dataset, collate_fn)
     
     def save(self):
-        super().save("attentions-{num_attention_layers}_classifier.pth")
+        super().save(f"attentions-{self.model.num_attention_layers}_classifier.pth")
 
 
 def parse_args():
@@ -354,6 +370,10 @@ def parse_args():
     parser.add_argument("--lid_model_type", type=str, default="linear", help="Type of model to train")
     parser.add_argument("--logfile", type=str, default="train.log", help="Log file")
     parser.add_argument("--num_attention_layers", type=int, default=None, help="Number of attention layers")
+
+    parser.add_argument("--only_eval", action="store_true", help="Only evaluate the model")
+    parser.add_argument("--eval_dataset_dir", type=str, default=None, help="Directory containing evaluation dataset")
+    parser.add_argument("--eval_units_dir", type=str, default=None, help="Directory containing the evaluation units if already computed")
     return parser.parse_args()
 
 
@@ -362,21 +382,43 @@ def get_centroid_sequence_reps(model_name, layer, dataset_dir, per_lang, lang, b
     Get the centroid sequences for a language and Kmeans centroids. This is a sequence of KMeans centroids (indices) for each audio file, and the KMeans centroids.
     If the centroid sequences are already computed, load them. Else, compute them by loading the model, dataset, extracting embeddings, extracting phoneme segment embeddings, training kmeans, and saving the units and Kmeans centroids.
     This will save the centroid sequences to disk, as well as the trained KMeans centroids.
+
+    Returns: 
+    data = {
+        "kmeans_reps": kmeans_reps,
+        "all_lengths": all_lengths,
+        "all_audio_files": all_audio_files,
+        "all_accents": all_accents,
+        "all_langs": all_langs
+    }
+    centroids: np.ndarray(shape=(n_clusters, hidden_size), dtype=float)
+    
     '''
     # If centroid sequences are already computed, load them
-    if os.path.exists(os.path.join(training_units_dir, f"all_segment_reps.pkl")):
+    if os.path.exists(os.path.join(training_units_dir, f"kmeans_data.pkl")):
         logger.info(f"LOADING CENTROID SEQUENCES FROM {training_units_dir}")
-        with open(os.path.join(training_units_dir, f"all_segment_reps.pkl"), "rb") as f:
-            centroid_sequences = pkl.load(f)
+        with open(os.path.join(training_units_dir, f"kmeans_data.pkl"), "rb") as f:
+            data = pkl.load(f)
         with open(os.path.join(kmeans_dir, f"kmeans_model_centroids.npy"), "rb") as f:
             centroids = np.load(f)
 
-        random.shuffle(centroid_sequences)
-        centroid_sequences = centroid_sequences[:per_lang]
+        # centroid_sequences = data["centroid_sequences"]
+        # accents = data["accents"]
 
-        return centroid_sequences, centroids
+        # centroids_accents = list(zip(centroid_sequences, accents))
+        # random.shuffle(centroids_accents)
+        # centroids_accents = centroids_accents[:per_lang]
+        # centroid_sequences, accents = zip(*centroids_accents)
 
-    logger.info(f"Computing centroid sequences for {lang}: loading model, dataset, extracting embeddings, extracting phoneme segment embeddings, training kmeans, and saving the units and Kmeans centroids...")
+        return data, centroids
+
+
+    logger.info(f"Computing centroid sequences for {lang}: loading dataset, model, extracting embeddings, extracting phoneme segment embeddings, training kmeans, and saving the units and Kmeans centroids...")
+
+    dataset = load_lid_dataset(dataset_dir, lang = lang, per_lang = per_lang)
+    if dataset is None:
+        return None, None
+
     # Load the model
     logger.info(f"Loading model: {model_name}")
     processor = AutoProcessor.from_pretrained(model_name)
@@ -384,38 +426,42 @@ def get_centroid_sequence_reps(model_name, layer, dataset_dir, per_lang, lang, b
     model = Wav2Vec2ForPreTraining.from_pretrained(model_name)
 
     # Load the dataset
-    logger.info(f"Loading dataset from {dataset_dir}")
-    if lang is None:
-        train_dataset = load_vl107_all_langs(per_lang=per_lang, vl107_dir=dataset_dir)
-    else:
-        train_dataset = load_vl107_lang(lang=lang, per_lang=per_lang, vl107_dir=dataset_dir)
     
-    train_dataset = train_dataset.map(prepare_dataset, fn_kwargs = {"processor": processor} , batched=True, batch_size=batch_size, remove_columns=["signal", "lang"])
+    # logger.info(f"Loading dataset from {dataset_dir}")
+    # if lang is None:
+    #     train_dataset = load_vl107_all_langs(per_lang=per_lang, vl107_dir=dataset_dir)
+    # else:
+    #     train_dataset = load_vl107_lang(lang=lang, per_lang=per_lang, vl107_dir=dataset_dir)
+    
+    
+    dataset = dataset.map(prepare_dataset, fn_kwargs = {"processor": processor} , batched=True, batch_size=batch_size, remove_columns=["signal"])
     # Shape of input
-    logger.info(torch.tensor(train_dataset[0]["input_values"]).shape)    
+    logger.info(f"Shape of input: {torch.tensor(dataset[0]["input_values"]).shape}")
+          
+    dataloader = DataLoader(dataset, shuffle=False, collate_fn=collate_fn_for_extracting_units, batch_size=batch_size)
 
-    dataloader = DataLoader(train_dataset, shuffle=False, collate_fn=collate_fn, batch_size=batch_size)
-
-    # Extract embeddings
     logger.info(f"Extracting embeddings from layer {layer}")
-    all_full_reps, _, _ = extract_embeddings(training_units_dir, model = model, dataloader = dataloader, layer = layer)
-    logger.info(f"Number of representations: {len(all_full_reps)}")
+    data = extract_embeddings(training_units_dir, model = model, dataloader = dataloader, layer = layer)
+    logger.info(f"Number of representations: {len(data["all_full_reps"])}")
 
     # Extract phoneme segment embeddings
     logger.info("Extracting phoneme segment embeddings")
-    all_segment_reps = extract_phoneme_segment_embeddings(training_units_dir, all_full_reps)
-    logger.info(f"Number of segment representations: {len(all_segment_reps)}")
+    data = extract_phoneme_segment_embeddings(training_units_dir, data)
+    logger.info(f"Number of segment representations: {len(data["all_segment_reps"])}")
 
     # Train kmeans and save the units
-    logger.info(f"Training kmeans on segment representations or using trained KMeans in output_dir")  
-    centroid_sequences = compute_kmeans_reps(all_segment_reps, kmeans_dir = kmeans_dir, output_dir = training_units_dir, n_clusters = 100, save = True)
+    logger.info(f"Training kmeans on segment representations")
+    data = compute_kmeans_reps(data, kmeans_dir = kmeans_dir, output_dir = training_units_dir, n_clusters = 100, save = True)
+
     with open(os.path.join(kmeans_dir, f"kmeans_model_centroids.npy"), "rb") as f:
         centroids = np.load(f)
 
-    random.shuffle(centroid_sequences)
-    centroid_sequences = centroid_sequences[:per_lang]
+    # random.shuffle(centroid_sequences)
+    # centroid_sequences = centroid_sequences[:per_lang]
     
-    return centroid_sequences, centroids
+    ##### DO PER_LANG ##########
+
+    return data, centroids
 
 
 def get_dataset_splits(lid_dataset, dev_size = 0.05, test_size = 0.1):
@@ -497,7 +543,9 @@ def construct_lid_dataset_codevectors(dataset_dir, per_lang, model_name, layer, 
     ### CHANGE THIS TO DATASET_DIR
     # langs = os.listdir(training_units_dir)
 
-    langs = os.listdir(dataset_dir)
+    #### Currently hardcoded ; change this #######
+    vl107_dir = "/exp/jvillalba/corpora/voxlingua107"
+    langs = sorted(os.listdir(vl107_dir))
 
     #### For now, we'll just use langs that have non-empty directories in the output_dir ####
     # langs = [lang for lang in langs if len(os.listdir(os.path.join(training_units_dir, lang))) > 0]
@@ -506,39 +554,70 @@ def construct_lid_dataset_codevectors(dataset_dir, per_lang, model_name, layer, 
     idx2lang = {idx: lang for lang, idx in lang2idx.items()}
     # langs = ["ar", "hi", "en"]
     logger.info(f"Number of languages: {len(langs)}")
-    lid_dataset = []
+    lid_dataset = None
+    centroids = None
     for lang in langs:
         logger.info(f"Processing language: {lang}")
         training_units_dir_lang = os.path.join(training_units_dir, lang)
         # kmeans_output_dir = os.path.join(training_units_dir, lang)
-        centroid_sequences, centroids = get_centroid_sequence_reps(model_name, layer, dataset_dir, per_lang, lang, batch_size, kmeans_dir, training_units_dir_lang)
+        data, local_centroids = get_centroid_sequence_reps(model_name, layer, dataset_dir, per_lang, lang, batch_size, kmeans_dir, training_units_dir_lang)
         
-        lid_dataset.extend([{"sequence": centroid_sequence, "lang": lang2idx[lang]} for centroid_sequence in centroid_sequences])
+        if data is None: # This will be the case if some lang is not available for some dataset
+            continue
+
+        centroids = local_centroids
+
+        if lid_dataset is None:
+            lid_dataset = data
+        else:
+            for key in lid_dataset.keys():
+                lid_dataset[key].extend(data[key])
+
     
     logger.info(f"Number of samples: {len(lid_dataset)}")
 
     ########## REMOVE ##########
     # lid_dataset = random.sample(lid_dataset, 50000)
 
-    
-    lid_dataset = {"sequence": [item["sequence"] for item in lid_dataset],\
-                    "lang": [item["lang"] for item in lid_dataset]}
+    # lid_dataset: {
+    #     "sequences": kmeans_reps,
+    #     "all_lengths": all_lengths,
+    #     "all_audio_files": all_audio_files,
+    #     "all_accents": all_accents,
+    #     "all_langs": all_langs
+    # }
+
+    # Rename keys
+    lid_dataset["sequence"] = lid_dataset["sequences"]
+    lid_dataset.pop("sequences")
+    lid_dataset["lang"] = [lang2idx[lang] for lang in lid_dataset["all_langs"]]
+    lid_dataset.pop("all_langs")
+    lid_dataset["accent"] = lid_dataset["all_accents"]
+    lid_dataset.pop("all_accents")
+    lid_dataset["audio_file"] = lid_dataset["all_audio_files"]
+    lid_dataset.pop("all_audio_files")
+    lid_dataset["length"] = lid_dataset["all_lengths"]
+    lid_dataset.pop("all_lengths")    
+
     lid_dataset = Dataset.from_dict(lid_dataset)
 
     logger.info(f"Total number of samples: {len(lid_dataset)}")
-    logger.info(f"Example sequence: {len(lid_dataset[0]["sequence"])}, Language: {idx2lang[lid_dataset[0]['lang']]}, Length: {len(lid_dataset[0]['sequence'])}")
+    logger.info(f"Example sequence: Accent: {lid_dataset[0]['accent']}, Language: {idx2lang[lid_dataset[0]['lang']]}, Length: {len(lid_dataset[0]['sequence'])}")
 
-    lid_dataset.set_transform(map_get_codevectors_reps, columns=["sequence", "lang"])
+    lid_dataset.set_transform(map_get_codevectors_reps, columns=["sequence", "lang", "accent"])
 
-    train_dataset, dev_dataset, test_dataset = get_dataset_splits(lid_dataset, dev_size = 1000, test_size = 1000)
+    return lid_dataset, lang2idx, idx2lang
 
-    return train_dataset, dev_dataset, test_dataset, lang2idx, idx2lang
+    # train_dataset, dev_dataset, test_dataset = get_dataset_splits(lid_dataset, dev_size = 1000, test_size = 1000)
+
+    # return train_dataset, dev_dataset, test_dataset, lang2idx, idx2lang
 
 def collate_fn(batch):
     '''Collate function for the dataloader. Batch comes from lid_dataset. Labels are integers representing the language'''
     input_values = [torch.tensor(item["sequence"]) for item in batch]
     labels = [item["lang"] for item in batch]    
-    return {"input_values": torch.stack(input_values), "labels": torch.tensor(labels)}
+    accents = [item["accent"] for item in batch]
+    return {"input_values": torch.stack(input_values), "labels": torch.tensor(labels), "accents": accents}
 
 def main():
     global logger
@@ -559,17 +638,49 @@ def main():
     lid_model_type = args.lid_model_type
     logfile = args.logfile
     num_attention_layers = args.num_attention_layers
+    
 
+    ### Put params in argparse
+    only_eval = args.only_eval
+    eval_dataset_dir = args.eval_dataset_dir
+    eval_units_dir = args.eval_units_dir
+
+
+    # logger.info(f"Model name: {model_name}, Layer: {layer}, Dataset dir: {dataset_dir}, Training units dir: {training_units_dir}, Kmeans dir: {kmeans_dir}, Per lang: {per_lang}, Num epochs: {num_epochs}, Batch size: {batch_size}, LR: {lr}, Output dir: {output_dir}, Load trained from dir: {load_trained_from_dir}")
 
     logger = get_logger(logfile)
     logger.info("Starting training/evaluating LID model on KMeans centroids")
+    if only_eval:
+        logger.info("ONLY EVALUATING!")
 
     os.makedirs(output_dir, exist_ok=True)    
 
-    logger.info(f"Type of LID model: {lid_model_type}")
-    if lid_model_type == "linear":
-        train_dataset, dev_dataset, test_dataset, _, idx2lang = construct_lid_dataset_codevectors(dataset_dir, per_lang, model_name, layer, batch_size, kmeans_dir, training_units_dir)
+    # Get dataset:
+    ## For training, we get train, dev, test splits
+    ## For *only* evaluation setting, we only get a test split
+
+    # Only load training dataset if we are training
+    if not only_eval:
+        logger.info("Loading training dataset...")
+        lid_dataset, _, idx2lang = construct_lid_dataset_codevectors(dataset_dir, per_lang, model_name, layer, batch_size, kmeans_dir, training_units_dir)
+        train_dataset, dev_dataset, test_dataset = get_dataset_splits(lid_dataset, dev_size = 1000, test_size = 1000)
         sequence_size = len(train_dataset[0]["sequence"])
+        # train_dataset, dev_dataset, test_dataset, _, idx2lang = construct_lid_dataset_codevectors(dataset_dir, per_lang, model_name, layer, batch_size, kmeans_dir, training_units_dir)
+    else:
+        logger.info(f"Evaluating model on eval dataset...")
+        eval_dataset, _, idx2lang = construct_lid_dataset_codevectors(eval_dataset_dir, per_lang, model_name, layer, batch_size, kmeans_dir, eval_units_dir)
+        sequence_size = len(eval_dataset[0]["sequence"])
+
+    # Get LID model depending on lid_model_type
+
+    assert lid_model_type in ["linear", "cnn2-linear", "cnn-attentions2-linear", "cnn-attentions-linear"], "Invalid LID model type"
+    if only_eval:
+        assert load_trained_from_dir, "If only evaluating, you must load the model from a directory"
+
+    logger.info(f"Type of LID model: {lid_model_type}")
+    
+    if lid_model_type == "linear":
+        # train_dataset, dev_dataset, test_dataset, _, idx2lang = construct_lid_dataset_codevectors(dataset_dir, per_lang, model_name, layer, batch_size, kmeans_dir, training_units_dir)
         hidden_size = 768
         num_classes = len(idx2lang)
         logger.info(f"Num classes: {num_classes}")
@@ -578,8 +689,7 @@ def main():
                                                     batch_size = batch_size, lr = lr, num_epochs = num_epochs)
 
     elif lid_model_type == "cnn2-linear":
-        train_dataset, dev_dataset, test_dataset, _, idx2lang = construct_lid_dataset_codevectors(dataset_dir, per_lang, model_name, layer, batch_size, kmeans_dir, training_units_dir)
-        sequence_size = len(train_dataset[0]["sequence"])
+        # train_dataset, dev_dataset, test_dataset, _, idx2lang = construct_lid_dataset_codevectors(dataset_dir, per_lang, model_name, layer, batch_size, kmeans_dir, training_units_dir)
         hidden_size = 768
         num_classes = len(idx2lang)
         logger.info(f"Num classes: {num_classes}")
@@ -588,8 +698,6 @@ def main():
                                            batch_size = batch_size, lr = lr, num_epochs = num_epochs)
     
     elif lid_model_type == "cnn-attentions2-linear":
-        train_dataset, dev_dataset, test_dataset, _, idx2lang = construct_lid_dataset_codevectors(dataset_dir, per_lang, model_name, layer, batch_size, kmeans_dir, training_units_dir)
-        sequence_size = len(train_dataset[0]["sequence"])
         hidden_size = 768
         num_classes = len(idx2lang)
         logger.info(f"Num classes: {num_classes}")
@@ -599,8 +707,6 @@ def main():
 
     elif lid_model_type == "cnn-attentions-linear":
         assert num_attention_layers is not None, "Number of attention layers not provided"
-        train_dataset, dev_dataset, test_dataset, _, idx2lang = construct_lid_dataset_codevectors(dataset_dir, per_lang, model_name, layer, batch_size, kmeans_dir, training_units_dir)
-        sequence_size = len(train_dataset[0]["sequence"])
         hidden_size = 768
         num_classes = len(idx2lang)
         logger.info(f"Num classes: {num_classes}")
@@ -609,27 +715,37 @@ def main():
                                                         batch_size = batch_size, lr = lr, num_epochs = num_epochs)
 
     
-    # if not load_trained_from_dir:
-    logger.info(f"Training model...")
-    lid_model.train(train_dataset, dev_dataset, evaluate_steps = evaluate_steps)
+    # Train the model
+    if not only_eval:
+        logger.info(f"Training model...")
+        lid_model.train(train_dataset, dev_dataset, evaluate_steps = evaluate_steps)
+        lid_model.save()
 
-    lid_model.save()
-    
-    # Evaluate the model
-    logger.info(f"Evaluating model...")
-    preds, labels, accuracy = lid_model.evaluate(test_dataset)
-    logger.info(f"Accuracy: {accuracy}")
+        # Evaluate the model
+        logger.info(f"Evaluating model on test split of train dataset...")
+        preds, labels, accuracy = lid_model.evaluate(test_dataset)
+        logger.info(f"Accuracy: {accuracy}")
 
-    # Save the predictions
-    ## We'll save a list of audio files, their predicted labels, and their true labels
-    # audio_files_test = [item["audio_file"] for item in test_dataset]
-    preds = preds.cpu().numpy()
-    labels = labels.cpu().numpy()
-    preds = [idx2lang[pred] for pred in preds]
-    labels = [idx2lang[label] for label in labels]
-    with open(os.path.join(output_dir, "predictions.pkl"), "wb") as f:
-        # pkl.dump({"audio_files": audio_files_test, "preds": preds, "labels": labels}, f)
-        pkl.dump({"preds": preds, "labels": labels}, f)
+    # Evaluate the model on eval dataset if provided
+    if eval_dataset_dir:
+        logger.info(f"Evaluating model on eval dataset...")
+        eval_dataset, _, idx2lang = construct_lid_dataset_codevectors(eval_dataset_dir, per_lang, model_name, layer, batch_size, kmeans_dir, eval_units_dir)
+        preds, labels, accents, accuracy = lid_model.evaluate(eval_dataset)
+        logger.info(f"Accuracy: {accuracy}")
+
+
+        # Save the predictions
+        ## We'll save a list of audio files, their predicted labels, and their true labels
+        # audio_files_test = [item["audio_file"] for item in test_dataset]
+        preds = preds.cpu().numpy()
+        labels = labels.cpu().numpy()
+        # accents = accents.cpu().numpy()
+        preds = [idx2lang[pred] for pred in preds]
+        labels = [idx2lang[label] for label in labels]
+
+        with open(os.path.join(output_dir, "predictions.pkl"), "wb") as f:
+            # pkl.dump({"audio_files": audio_files_test, "preds": preds, "labels": labels}, f)
+            pkl.dump({"preds": preds, "labels": labels, "accents": accents}, f)
 
 
 if __name__ == "__main__":
