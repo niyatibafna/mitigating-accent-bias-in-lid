@@ -13,6 +13,13 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 import pickle as pkl
 from multiprocessing import Pool, cpu_count
+
+sys.path.append("/home/hltcoe/nbafna/projects/mitigating-accent-bias-in-lid/utils/dataloading/")
+from dataset_loader import load_lid_dataset
+from vl107 import load_vl107, load_vl107_lang
+from edacc import load_edacc
+# from vl107 import load_vl107, load_vl107_lang
+# import lhotse
 print("Available CPU cores:", cpu_count())
 
 from argparse import ArgumentParser
@@ -48,96 +55,18 @@ def parse_args():
     return parser.parse_args()
 
 
-def load_audio_file(vl107_dir, audio, lang):
-
-    audio_path = os.path.join(vl107_dir, audio)
-    # data.append({"signal": audio_path, "lang": lang, "audio_file": audio_path})
-    # data = {"signal": [f["signal"] for f in data], "lang": [f["lang"] for f in data], "audio_file": [f["audio_file"] for f in data]}
-    # return Dataset.from_dict(data).cast_column("signal", Audio(sampling_rate=16_000))
-
-    
-    signal, sr = torchaudio.load(audio_path)
-    signal = signal.squeeze()
-    # logger.info(f"Signal shape: {signal.shape}, Sampling rate: {sr}")
-    if sr != 16000:
-        signal = torchaudio.transforms.Resample(sr, 16000)(signal)
-
-    # data.append({"signal": signal, "lang": lang, "audio_file": audio})
-    clip_length = 6 # 6s
-
-    if signal.shape[0] < clip_length*16000:
-        return None
-    
-    # Split the audio into clips of 6s
-    signal = signal[:clip_length*16000*(signal.shape[0]//(clip_length*16000))]
-    signal = signal.reshape(-1, clip_length*16000)
-    audio_data = [{"signal": s, "lang": lang, "audio_file": audio} for s in signal]
-
-    # audio_data = []
-    # for i in range(0, len(signal), clip_length*16000):
-    #     if i+clip_length*16000 > len(signal):
-    #         break
-    #     audio_data.append({"signal": signal[i:i+clip_length*16000], "lang": lang, "audio_file": audio})
-
-    return audio_data
-
-def load_vl107_lang(lang = None, per_lang = None, vl107_dir = "/exp/jvillalba/corpora/voxlingua107"):
-    '''Load audio files from VL107 dataset'''
-    vl107_dir = f"{vl107_dir}/{lang}"
-    if not os.path.exists(vl107_dir):
-        logger.info(f"Directory {vl107_dir} not found")
-        return None
-
-    files = [f for f in os.listdir(vl107_dir) if f.endswith(".wav")]
-    random.shuffle(files)
-    if per_lang is not None:
-        files = files[:per_lang]
-
-    # !--------- Currently training on shorter (e.g. 6s) clips? -------------!
-    logger.info(f"Loading audio files for {lang} from {vl107_dir}")
-    data = []
-
-    audio_data = [load_audio_file(vl107_dir, audio, lang) for audio in files]
-    for audio in audio_data:
-        if audio is not None:
-            data.extend(audio)
-
-    # for audio in files:
-    #     audio_data = load_audio_file(vl107_dir, audio, lang, per_lang = per_lang)
-    #     if audio_data is not None:
-    #         data.extend(audio_data)
-        
-
-    logger.info(f"Number of audio clips for {lang}: {len(data)}")
-    data = {"signal": [f["signal"] for f in data], "lang": [f["lang"] for f in data], "audio_file": [f["audio_file"] for f in data]}
-    return Dataset.from_dict(data)
-
-    
-
-def load_vl107_all_langs(per_lang = None, vl107_dir = "/exp/jvillalba/corpora/voxlingua107"):
-
-    logger.info(f"Loading all languages from {vl107_dir}")
-    dataset = Dataset.from_dict({"signal": [], "lang": [], "audio_file": []})
-    for lang in os.listdir(vl107_dir):
-        lang_dir = os.path.join(vl107_dir, lang)
-        if not os.path.isdir(lang_dir):
-            continue
-        logger.info(f"Loading audio files for {lang} from {lang_dir}")
-        lang_dataset = load_vl107_lang(lang = lang, per_lang = per_lang, vl107_dir = vl107_dir)
-        dataset = concatenate_datasets([dataset, lang_dataset])
-    
-    dataset = dataset.shuffle()
-
-    return dataset
-
-
 def prepare_dataset(batch, processor = None):
-
+    
     array_values = [np.array(signal).squeeze() for signal in batch["signal"]]
     batch["input_values"] = processor(array_values, sampling_rate = 16_000, \
                                     padding = True, \
                                     return_tensors="pt").input_values
     batch["lengths"] = [array.shape[0] for array in array_values]
+    batch["lang"] = [item for item in batch["lang"]]
+    batch["accent"] = [item for item in batch["accent"]]
+    batch["audio_file"] = [item for item in batch["audio_file"]]
+
+    # batch["accents"] = [item["accent"] for item in batch["accent"]]
     # logger.info(type(batch["input_values"]))
     # logger.info(batch["input_values"].shape)
     # array_values = [item["array"] for item in batch["signal"]]
@@ -155,22 +84,31 @@ def collate_fn(batch):
         # "text_files": [item["text_file"] for item in batch],
         # "timestamp_files": [item["timestamp_file"] for item in batch],
         "lengths": [item["lengths"] for item in batch],
-        "audio_file": [item["audio_file"] for item in batch]
+        "lang": [item["lang"] for item in batch],
+        "audio_file": [item["audio_file"] for item in batch],
+        "accent": [item["accent"] for item in batch],
     }
 
 
 def extract_embeddings(output_dir, model = None, dataloader = None, layer = None, save = False):
     '''Load embeddings from disk if already computed, otherwise compute and save them'''
 
-    if os.path.exists(os.path.join(output_dir, f"all_full_reps.pkl")):
-        with open(os.path.join(output_dir, f"all_full_reps.pkl"), "rb") as f:
-            all_full_reps = pkl.load(f)
-        with open(os.path.join(output_dir, f"all_lengths.pkl"), "rb") as f:
-            all_lengths = pkl.load(f)
-        with open(os.path.join(output_dir, f"all_audio_files.pkl"), "rb") as f:
-            all_audio_files = pkl.load(f)
+    if os.path.exists(os.path.join(output_dir, f"embeddings_data.pkl")):
+        print("WARNING: Loading model representations of audio from disk (extract_embeddings)")
+        with open(os.path.join(output_dir, f"embeddings_data.pkl"), "rb") as f:
+            data = pkl.load(f)
+        
+        # with open(os.path.join(output_dir, f"all_full_reps.pkl"), "rb") as f:
+        #     all_full_reps = pkl.load(f)
+        # with open(os.path.join(output_dir, f"all_lengths.pkl"), "rb") as f:
+        #     all_lengths = pkl.load(f)
+        # with open(os.path.join(output_dir, f"all_audio_files.pkl"), "rb") as f:
+        #     all_audio_files = pkl.load(f)
+        # with open(os.path.join(output_dir, f"all_accents.pkl"), "rb") as f:
+        #     all_accent = pkl.load(f)
 
-        return all_full_reps, all_lengths, all_audio_files
+        # return all_full_reps, all_lengths, all_audio_files
+        return data
 
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
@@ -178,6 +116,8 @@ def extract_embeddings(output_dir, model = None, dataloader = None, layer = None
     all_full_reps = [] # Representations of each sample 
     all_lengths = [] # Length of each sample
     all_audio_files = []
+    all_accents = []
+    all_langs = []
 
     model.eval()
     model.to("cuda")
@@ -200,6 +140,7 @@ def extract_embeddings(output_dir, model = None, dataloader = None, layer = None
             batch["input_values"] = batch["input_values"].to("cuda")
             outputs = model(batch["input_values"], output_hidden_states=True)
             outputs_layer = outputs.hidden_states[layer] # (1st output is embedding layer)
+            del outputs
             # logger.info(f"Sample output_layer rep: {outputs_layer}")
             # logger.info(f"outputs.hidden_states: {outputs.hidden_states}")
 
@@ -208,7 +149,7 @@ def extract_embeddings(output_dir, model = None, dataloader = None, layer = None
                 length = batch["lengths"][i]
                 all_lengths.append(length)
                 true_sequence_length = length//320 + 1 # going from samples to frames, 1 frame = 20ms, 320 samples = 20ms  since sampling rate is 16kHz
-                rep = outputs_layer[i][:true_sequence_length, :] # We only want the representations for the original length
+                rep = outputs_layer[i][:true_sequence_length, :].cpu() # We only want the representations for the original length
                 all_full_reps.append(rep)
                 # logger.info(f"Length: {length}")
                 # logger.info(f"True sequence length: {true_sequence_length}")
@@ -216,33 +157,58 @@ def extract_embeddings(output_dir, model = None, dataloader = None, layer = None
                 # logger.info(f"Rep shape: {rep.shape}")
 
             all_audio_files.extend(batch["audio_file"])
+            all_accents.extend(batch["accent"])
+            all_langs.extend(batch["lang"])
 
-
-    logger.info(f"Number of representations: {len(all_full_reps)}")
-    logger.info(f"Example representation: {all_full_reps[0].shape}, {all_full_reps[0]}")
+    data = {"all_full_reps": all_full_reps, "all_lengths": all_lengths, \
+            "all_audio_files": all_audio_files, "all_accents": all_accents, \
+                "all_langs": all_langs}
+    # logger.info(f"Number of representations: {len(all_full_reps)}")
+    # logger.info(f"Example representation: {all_full_reps[0].shape}, {all_full_reps[0]}")
     # Save the representations and labels
     if save:
-        with open(os.path.join(output_dir, f"all_full_reps.pkl"), "wb") as f:
-            pkl.dump(all_full_reps, f)
-        with open(os.path.join(output_dir, f"all_lengths.pkl"), "wb") as f:
-            pkl.dump(all_lengths, f)
-        with open(os.path.join(output_dir, f"all_audio_files.pkl"), "wb") as f:
-            pkl.dump(all_audio_files, f)
+        with open(os.path.join(output_dir, f"embeddings_data.pkl"), "wb") as f:
+            pkl.dump(data, f)
 
-    return all_full_reps, all_lengths, all_audio_files
+        # with open(os.path.join(output_dir, f"all_full_reps.pkl"), "wb") as f:
+        #     pkl.dump(all_full_reps, f)
+        # with open(os.path.join(output_dir, f"all_lengths.pkl"), "wb") as f:
+        #     pkl.dump(all_lengths, f)
+        # with open(os.path.join(output_dir, f"all_audio_files.pkl"), "wb") as f:
+        #     pkl.dump(all_audio_files, f)
+        # with open(os.path.join(output_dir, f"all_accents.pkl"), "wb") as f:
+        #     pkl.dump(all_accents, f)
+
+    return data
     
 
-def extract_phoneme_segment_embeddings(output_dir = None, all_full_reps = None, segment_size = 100, save = False):
+def extract_phoneme_segment_embeddings(output_dir = None, data = None, segment_size = 100, save = False):
 
     '''Extract phoneme segment embeddings from the full representations. segment_size is in ms
-    all_full_reps: List of tensors of shape (sequence_length, hidden_size). Each tensor may have different sequence length.
+    data: {
+        "all_full_reps": List of model (e.g. W2V2) representations of data,
+        "all_lengths": List of lengths of each sample,
+        "all_audio_files": List of audio files,
+        "all_accents": List of accents,
+        "all_langs": List of languages
+    }
+    Returns:
+    data: {
+        "all_segment_reps": List of segment representations,
+        "all_lengths": List of lengths of each sample,
+        "all_audio_files": List of audio files,
+        "all_accents": List of accents,
+        "all_langs": List of languages
+    }
     '''
+
     if output_dir:
-        if os.path.exists(os.path.join(output_dir, f"all_segment_reps.pkl")):
-            with open(os.path.join(output_dir, f"all_segment_reps.pkl"), "rb") as f:
-                all_segment_reps = pkl.load(f)
-            return all_segment_reps
+        if os.path.exists(os.path.join(output_dir, f"phoneme-embeddings_data.pkl")):
+            with open(os.path.join(output_dir, f"phoneme-embeddings_data.pkl"), "rb") as f:
+                data = pkl.load(f)
+            return data
     
+    all_full_reps, all_lengths, all_audio_files, all_accents, all_langs = data["all_full_reps"], data["all_lengths"], data["all_audio_files"], data["all_accents"], data["all_langs"]
     # pool_size is the number of frames in a segment
     pool_size = segment_size//20 # 20ms per frame
     
@@ -254,6 +220,11 @@ def extract_phoneme_segment_embeddings(output_dir = None, all_full_reps = None, 
 
     all_segment_reps = []
     # We want to average the representations over 100ms segments i.e. 5 frames
+    ## Currently, we have k frames where each is 20 ms
+    ## Shape of full_rep: k, hidden_size
+    ## We want to collapse k such that we are pooling over 100 ms segments 
+    ## We want: k//pool_size, hidden_size
+ 
     for idx in range(len(all_full_reps)):
         full_rep = all_full_reps[idx]
         seg_reps = []
@@ -274,16 +245,23 @@ def extract_phoneme_segment_embeddings(output_dir = None, all_full_reps = None, 
         #     seg_reps.append(rep)
         all_segment_reps.append(seg_reps)
     
+    data = {
+        "all_segment_reps": all_segment_reps,
+        "all_lengths": all_lengths,
+        "all_audio_files": all_audio_files,
+        "all_accents": all_accents,
+        "all_langs": all_langs
+    }
     # We save the segment representations by default
     if save:
         assert output_dir is not None, "Output directory not provided, cannot save segment representations. Pass save=False to skip saving."
-        with open(os.path.join(output_dir, f"all_segment_reps.pkl"), "wb") as f:
-            pkl.dump(all_segment_reps, f)
+        with open(os.path.join(output_dir, f"phoneme-embeddings_data.pkl"), "wb") as f:
+            pkl.dump(data, f)
 
-    return all_segment_reps
+    return data
 
 
-def compute_kmeans_reps(all_segment_reps, kmeans_dir = None, output_dir = None, n_clusters = 100, save = False):
+def compute_kmeans_reps(data, kmeans_dir = None, output_dir = None, n_clusters = 100, save = False):
     '''
     Train kmeans on the segment representations, returns the units and centroids
     all_segment_reps: List of segment representations
@@ -292,15 +270,29 @@ def compute_kmeans_reps(all_segment_reps, kmeans_dir = None, output_dir = None, 
     n_clusters: Number of clusters for kmeans
     save: whether to save the units to disk
     '''
+    all_segment_reps, all_lengths, all_audio_files, all_accents, all_langs = data["all_segment_reps"], data["all_lengths"], data["all_audio_files"], data["all_accents"], data["all_langs"]
 
     kmeans = KMeansOnUnits(n_clusters = n_clusters, output_dir = kmeans_dir)
     if kmeans.trained == False: # This is true if the model has already been saved to kmeans_dir
+        print("WARNING: Training Kmeans from scratch!")
         kmeans.train(all_segment_reps)
         kmeans.save_model()
+    else:
+        print("WARNING: Using pre-trained Kmeans model")
+
     kmeans_reps = kmeans.predict(all_segment_reps)
+    data = {
+        "sequences": kmeans_reps,
+        "all_lengths": all_lengths,
+        "all_audio_files": all_audio_files,
+        "all_accents": all_accents,
+        "all_langs": all_langs
+    }
     if save:
-        kmeans.save_centroid_sequences(kmeans_reps, output_dir)
-    return kmeans_reps
+        # kmeans.save_centroid_sequences(kmeans_reps, output_dir)
+        with open(os.path.join(output_dir, f"kmeans_data.pkl"), "wb") as f:
+            pkl.dump(data, f)
+    return data
 
 
 def main():
@@ -320,38 +312,45 @@ def main():
 
     os.makedirs(output_dir, exist_ok=True)
 
+
+    # Load the dataset
+    logger.info(f"Loading dataset: {dataset_dir}")
+
+    dataset = load_lid_dataset(dataset_dir, lang = lang, per_lang = per_lang)
+    if dataset is None:
+        logger.info(f"Dataset {dataset_dir} for lang {lang} not found")
+        return
+
     # Load the model
     logger.info(f"Loading model: {model_name}")
     processor = AutoProcessor.from_pretrained(model_name)
     # feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/wav2vec2-base")
     model = Wav2Vec2ForPreTraining.from_pretrained(model_name)
 
-    # Load the dataset
-    logger.info(f"Loading dataset from {dataset_dir}")
-    if lang is None:
-        train_dataset = load_vl107_all_langs(per_lang=per_lang, vl107_dir=dataset_dir)
-    else:
-        train_dataset = load_vl107_lang(lang=lang, per_lang=per_lang, vl107_dir=dataset_dir)
     
-    train_dataset = train_dataset.map(prepare_dataset, fn_kwargs = {"processor": processor} , batched=True, batch_size=batch_size, remove_columns=["signal", "lang"])
+    dataset = dataset.map(prepare_dataset, fn_kwargs = {"processor": processor} , batched=True, batch_size=batch_size, remove_columns=["signal"])
+
+    # dataset = dataset.map(prepare_dataset, fn_kwargs = {"processor": processor} , batched=True, batch_size=batch_size, remove_columns=["signal"], \
+    #                       num_proc = 4, keep_in_memory=False)
+    
     # Shape of input
-    logger.info(f"Shape of input: {torch.tensor(train_dataset[0]["input_values"]).shape}")
+    # logger.info(f"Shape of input: {torch.tensor(dataset[0]["input_values"]).shape}")
           
-    dataloader = DataLoader(train_dataset, shuffle=False, collate_fn=collate_fn, batch_size=batch_size)
+    dataloader = DataLoader(dataset, shuffle=False, collate_fn=collate_fn, batch_size=batch_size)
 
     # Extract embeddings
     logger.info(f"Extracting embeddings from layer {layer}")
-    all_full_reps, _, _ = extract_embeddings(output_dir, model = model, dataloader = dataloader, layer = layer)
-    logger.info(f"Number of representations: {len(all_full_reps)}")
+    data = extract_embeddings(output_dir, model = model, dataloader = dataloader, layer = layer)
+    logger.info(f"Number of representations: {len(data["all_full_reps"])}")
 
     # Extract phoneme segment embeddings
     logger.info("Extracting phoneme segment embeddings")
-    all_segment_reps = extract_phoneme_segment_embeddings(output_dir, all_full_reps)
-    logger.info(f"Number of segment representations: {len(all_segment_reps)}")
+    data = extract_phoneme_segment_embeddings(output_dir, data)
+    logger.info(f"Number of segment representations: {len(data["all_segment_reps"])}")
 
     # Train kmeans and save the units
     logger.info(f"Training kmeans on segment representations")
-    return compute_kmeans_reps(all_segment_reps, kmeans_dir = kmeans_dir, output_dir = output_dir, n_clusters = n_clusters, save = True)
+    return compute_kmeans_reps(data, kmeans_dir = kmeans_dir, output_dir = output_dir, n_clusters = n_clusters, save = True)
 
 
 if __name__ == "__main__":
