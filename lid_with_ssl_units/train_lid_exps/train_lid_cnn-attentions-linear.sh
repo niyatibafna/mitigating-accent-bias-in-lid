@@ -47,11 +47,13 @@ model_key="wav2vec2-base-layer8"
 # model_key="wavlm-base-layer8"
 
 layer=8
-dataset_dir="/exp/jvillalba/corpora/voxlingua107"
+# dataset_dir="/exp/jvillalba/corpora/voxlingua107"
+dataset_dir="vl107"
 # dataset_dir=None
-per_lang=5000
+per_lang=100
 num_epochs=200
-batch_sizes=(2048)
+# batch_sizes=(2048)
+batch_sizes=(4)
 batch_size=${batch_sizes[$SGE_TASK_ID-1]}
 lr=0.0001
 num_attention_layers=4
@@ -65,7 +67,11 @@ output_dir="/exp/nbafna/projects/mitigating-accent-bias-in-lid/wav2vec2_intermed
 
 logdir="/home/hltcoe/nbafna/projects/mitigating-accent-bias-in-lid/lid_with_ssl_units/train_logs"
 mkdir -p $logdir
-logfile="$logdir/train_lid_cnn-attentions$num_attention_layers-linear.log"
+logfile="$logdir/train_lid_cnn-attentions$num_attention_layers-linear_eval.log"
+
+eval_dataset_dir="edacc"
+eval_units_dir="/exp/nbafna/projects/mitigating-accent-bias-in-lid/wav2vec2_intermediate_outputs/vl107/$model_key/eval_units/"
+# only_eval=True
 
 
 /home/hltcoe/nbafna/.conda/envs/accent_bias/bin/python lid_with_ssl_units/train_lid.py \
@@ -81,7 +87,11 @@ logfile="$logdir/train_lid_cnn-attentions$num_attention_layers-linear.log"
     --output_dir $output_dir \
     --lid_model_type $lid_model_type \
     --logfile $logfile \
-    --num_attention_layers $num_attention_layers
+    --num_attention_layers $num_attention_layers \
+    --eval_dataset_dir $eval_dataset_dir \
+    --eval_units_dir $eval_units_dir \
+    --only_eval \
+    --load_trained_from_dir
 
 echo "Training LID complete"
 

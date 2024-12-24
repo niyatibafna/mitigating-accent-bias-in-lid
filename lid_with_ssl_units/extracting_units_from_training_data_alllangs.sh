@@ -4,7 +4,7 @@
 #$ -wd /home/hltcoe/nbafna/projects/mitigating-accent-bias-in-lid/
 # #$ -pe openmpi 8                   # Request 8 CPU cores
 #$ -m e
-#$ -t 1-5
+#$ -t 2-6
 #$ -j y -o qsub_logs/extracting_units_from_training_data_alllangs_$TASK_ID.out
 
 # Fill out RAM/memory (same thing) request,
@@ -48,11 +48,12 @@ model_key="wav2vec2-base-layer8"
 # model_key="wavlm-base-layer8"
 
 layer=8
-dataset_dir="/exp/jvillalba/corpora/voxlingua107"
+# dataset_dir="/exp/jvillalba/corpora/voxlingua107"
+dataset_dir="vl107"
 # dataset_dir=None
 per_lang=500
-batch_size=4
-n_clusters_all=(100 250 500 750 1000)
+batch_size=16
+n_clusters_all=(100 250 500 750 1000 1500)
 n_clusters=${n_clusters_all[$SGE_TASK_ID-1]}
 
 
@@ -71,11 +72,11 @@ python lid_with_ssl_units/extracting_units_from_training_data.py \
     --layer $layer \
     --dataset_dir $dataset_dir \
     --kmeans_dir $kmeans_dir \
-    --per_lang $per_lang \
     --batch_size $batch_size \
     --output_dir $kmeans_dir \
     --n_clusters $n_clusters \
-    --log_file $logfile
+    --log_file $logfile \
+    --per_lang $per_lang \
 
 
 # parser.add_argument("--model_name", type=str, default="facebook/wav2vec2-base", help="Model name")

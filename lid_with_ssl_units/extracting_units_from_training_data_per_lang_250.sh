@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 
-#$ -N per_lang100_extract_training_units
+#$ -N per_lang250_extract_training_units
 #$ -wd /home/hltcoe/nbafna/projects/mitigating-accent-bias-in-lid/
 #$ -m e
 #$ -t 1-107
-#$ -j y -o qsub_logs/extracting_units_from_training_data_100/$TASK_ID.out
+#$ -j y -o qsub_logs/extracting_units_from_training_data_250/$TASK_ID.out
 
 # Fill out RAM/memory (same thing) request,
 # the number of GPUs you want,
@@ -63,7 +63,7 @@ dataset_dir="vl107"
 # dataset_dir=None
 # per_lang=5000
 batch_size=8
-n_clusters=100
+n_clusters=250
 
 kmeans_dir="/exp/nbafna/projects/mitigating-accent-bias-in-lid/wav2vec2_intermediate_outputs/vl107/$model_key-$n_clusters/global_kmeans/"
 output_dir="/exp/nbafna/projects/mitigating-accent-bias-in-lid/wav2vec2_intermediate_outputs/vl107/$model_key-$n_clusters/training_units/$lang"
@@ -93,4 +93,4 @@ python lid_with_ssl_units/extracting_units_from_training_data.py \
 #     parser.add_argument("--per_lang", type=int, default=None, help="Number of audio files per language")
 #     parser.add_argument("--lang", type=str, default=None, help="Language to extract audio files from")
 #     parser.add_argument("--batch_size", type=int, default=1, help="Batch size")
-#     parser.add_argument("--output_dir", type=str, default="/exp/nbafna/projects/mitigating-accent-bias-in-lid/wav2vec2_intermediate_outputs", help="Output directory")
+#     parser.add_argument("--output_dir", type=str, default="/exp/nbafna/projects/mitigating-accent-bias-in-lid/wav2vec2_intermediate_outputs", help="Output directory75
