@@ -1,5 +1,7 @@
 import torch
-torch.ones(1).to("cuda") # This is to ensure that the GPU is initialized before the next import
+print(torch.cuda.is_available())
+if torch.cuda.is_available():
+    torch.ones(1).to("cuda") # This is to ensure that the GPU is initialized before the next import
 print(torch.cuda.is_available())
 import os, sys
 import numpy as np
@@ -272,7 +274,8 @@ def compute_kmeans_reps(data, kmeans_dir = None, output_dir = None, n_clusters =
     '''
     all_segment_reps, all_lengths, all_audio_files, all_accents, all_langs = data["all_segment_reps"], data["all_lengths"], data["all_audio_files"], data["all_accents"], data["all_langs"]
 
-    kmeans = KMeansOnUnits(n_clusters = n_clusters, output_dir = kmeans_dir)
+    dim = all_segment_reps[0].shape[-1]
+    kmeans = KMeansOnUnits(n_clusters = n_clusters, output_dir = kmeans_dir, dim = dim)
     if kmeans.trained == False: # This is true if the model has already been saved to kmeans_dir
         print("WARNING: Training Kmeans from scratch!")
         kmeans.train(all_segment_reps)
@@ -323,13 +326,17 @@ def main():
 
     # Load the model
     logger.info(f"Loading model: {model_name}")
-    processor = AutoProcessor.from_pretrained(model_name)
+    # processor = AutoProcessor.from_pretrained(model_name)
+    processor = AutoFeatureExtractor.from_pretrained(model_name)
     # feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/wav2vec2-base")
-    model = Wav2Vec2ForPreTraining.from_pretrained(model_name)
-
     
-    dataset = dataset.map(prepare_dataset, fn_kwargs = {"processor": processor} , batched=True, batch_size=batch_size, remove_columns=["signal"])
+    dataset = dataset.map(prepare_dataset, fn_kwargs = {"processor": processor} , \
+                          batched=True, batch_size=batch_size, \
+                            num_proc = 2, keep_in_memory=False,
+                            writer_batch_size = 50,
+                            remove_columns=["signal"])
 
+    model = Wav2Vec2ForPreTraining.from_pretrained(model_name)
     # dataset = dataset.map(prepare_dataset, fn_kwargs = {"processor": processor} , batched=True, batch_size=batch_size, remove_columns=["signal"], \
     #                       num_proc = 4, keep_in_memory=False)
     

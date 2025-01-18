@@ -1,15 +1,16 @@
 #!/usr/bin/env bash
 
-#$ -N per_lang250_extract_training_units
+#$ -N per_lang3000_extract_training_units
 #$ -wd /home/hltcoe/nbafna/projects/mitigating-accent-bias-in-lid/
 #$ -m e
 #$ -t 1-107
-#$ -j y -o qsub_logs/extracting_units_from_training_data_250/$TASK_ID.out
+#$ -j y -o qsub_logs/extracting_units_from_training_data_3000/$TASK_ID.out
 
 # Fill out RAM/memory (same thing) request,
 # the number of GPUs you want,
 # and the hostnames of the machines for special GPU models.
 #$ -l h_rt=10:00:00,mem_free=20G,gpu=1,hostname=!r8n04&!r9n08&!r7n04
+#$ -hold_jid 12861472
 
 # Submit to GPU queue
 #$ -q gpu.q
@@ -63,7 +64,7 @@ dataset_dir="vl107"
 # dataset_dir=None
 # per_lang=5000
 batch_size=8
-n_clusters=250
+n_clusters=3000
 
 kmeans_dir="/exp/nbafna/projects/mitigating-accent-bias-in-lid/wav2vec2_intermediate_outputs/vl107/$model_key-$n_clusters/global_kmeans/"
 output_dir="/exp/nbafna/projects/mitigating-accent-bias-in-lid/wav2vec2_intermediate_outputs/vl107/$model_key-$n_clusters/training_units/$lang"
