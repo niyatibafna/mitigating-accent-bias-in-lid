@@ -28,10 +28,14 @@ class KMeansOnUnits:
             with open(os.path.join(self.output_dir, f"kmeans_model_centroids.npy"), "rb") as f:
                 print(f"Loading trained kmeans model from {self.output_dir}")
                 centroids = np.load(f)
-                self.kmeans = faiss.Kmeans(self.dim, self.n_clusters, niter=20, verbose=True, gpu=False, nredo=10)
+                n_centroids = centroids.shape[0]
+                # We don't use self.n_clusters here because we want to be able to load a model with a different number of clusters
+                self.kmeans = faiss.Kmeans(self.dim, n_centroids, niter=20, verbose=True, gpu=False, nredo=10)
                 self.kmeans.index = faiss.IndexFlatL2(self.dim)  # Flat L2 index
+                print(f"Number of centroids: {n_centroids}")
                 # Check that n_clusters is the same as the number of centroids
-                assert self.n_clusters == centroids.shape[0], "Number of clusters does not match the number of centroids"
+                if n_centroids != self.n_clusters:
+                    print(f"WARNING: Number of centroids in the trained model ({n_centroids}) is different from the number of clusters ({self.n_clusters})")
                 self.kmeans.index.add(centroids)  # Add the centroids to the index
                 self.trained = True
 
