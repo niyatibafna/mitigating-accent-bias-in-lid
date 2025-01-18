@@ -20,6 +20,7 @@ from datasets import load_dataset, Dataset, Audio
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 import pickle as pkl
+import re
 # Log to wandb
 import wandb
 import logging
@@ -133,14 +134,15 @@ class LinearClassifiereonAttentionLayersModel(torch.nn.Module):
         x = self.conv1(x)
         # Shape of input: (batch_size, attention_dim, sequence_length//2)
         x = self.relu(x)
-        x = x.permute(0, 2, 1)
-        # Shape of input: (batch_size, sequence_length//2, attention_dim)
+        # Correct shape for transformer: (sequence_length//2, batch_size, attention_dim)
+        x = x.permute(2, 0, 1)
+        # Shape of input: (sequence_length//2, batch_size, attention_dim)
         x = self.transformer(x)
-        # Shape of input: (batch_size, sequence_length//2, attention_dim)
-        x = torch.mean(x, dim=1)
+        # Shape of input: (sequence_length//2, batch_size, attention_dim)
+        x = torch.mean(x, dim=0)
         # Shape of input: (batch_size, attention_dim)
-        return self.linear_output(x)
-    
+        x = self.linear_output(x)
+        return x
         
 
 class PostEncoder:
@@ -188,18 +190,22 @@ class PostEncoder:
                 if evaluate_steps and steps % evaluate_steps == 0:
 
                     # Evaluate
-                    _, _, accuracy = self.evaluate(dev_dataset)
+                    _, _, _, accuracy = self.evaluate(dev_dataset)
                     wandb.log({"loss": loss.item()})
                     wandb.log({"accuracy": accuracy, "epoch": epoch})
                     logger.info(f"Epoch: {epoch}, Steps: {steps}, Accuracy: {accuracy}")
+
 
             if not evaluate_steps:
                 # Log per epoch if evaluate_steps is not provided
                 wandb.log({"loss": loss.item()})
                 # Evaluate
-                _, _, accuracy = self.evaluate(dev_dataset)
+                _, _, _, accuracy = self.evaluate(dev_dataset)
                 wandb.log({"accuracy": accuracy, "epoch": epoch})
                 logger.info(f"Epoch: {epoch}, Accuracy: {accuracy}")
+
+            # Save the model after each epoch
+            self.save()
 
 
     def predict(self, test_dataset, collate_fn):
@@ -261,7 +267,8 @@ class LinearClassifieronPooledReps(PostEncoder):
         wandb.init(project="train_lid_on_ssl_linear", config={
             "batch_size": self.batch_size,
             "num_epochs": self.num_epochs,
-            "learning_rate": self.lr
+            "learning_rate": self.lr,
+            "output_dir": self.output_dir
         })
         super().train(train_dataset, dev_dataset, collate_fn, evaluate_steps)
 
@@ -301,7 +308,8 @@ class LinearClassifieronCNNs(PostEncoder):
         wandb.init(project="train_lid_on_ssl_cnns2-linear", config={
             "batch_size": self.batch_size,
             "num_epochs": self.num_epochs,
-            "learning_rate": self.lr
+            "learning_rate": self.lr,
+            "output_dir": self.output_dir
         })
         super().train(train_dataset, dev_dataset, collate_fn, evaluate_steps)
 
@@ -334,10 +342,16 @@ class LinearClassifiereonAttentionLayers(PostEncoder):
 
 
     def train(self, train_dataset, dev_dataset, evaluate_steps = None):
-        wandb.init(project="train_lid_on_ssl_attention", config={
+        kmeans_units = int(re.search(r"wav2vec2-base-layer8-(\d+)", self.output_dir).group(1))
+        wandb.init(project=f"train_lid_on_ssl_attentions-{self.model.num_attention_layers}", config={
             "batch_size": self.batch_size,
             "num_epochs": self.num_epochs,
-            "learning_rate": self.lr
+            "learning_rate": self.lr,
+            "num_attention_layers": self.model.num_attention_layers,
+            "attention_dim": self.model.attention_dim,
+            "hidden_size": self.model.hidden_size,
+            "output_dir": self.output_dir,
+            "kmeans_units": kmeans_units
         })
         super().train(train_dataset, dev_dataset, collate_fn, evaluate_steps)
 
@@ -413,6 +427,8 @@ def get_centroid_sequence_reps(model_name, layer, dataset_dir, per_lang, lang, b
         return data, centroids
 
 
+    # raise ValueError("Centroid sequences not found. Please compute them first.")
+
     logger.info(f"Computing centroid sequences for {lang}: loading dataset, model, extracting embeddings, extracting phoneme segment embeddings, training kmeans, and saving the units and Kmeans centroids...")
 
     dataset = load_lid_dataset(dataset_dir, lang = lang, per_lang = per_lang)
@@ -451,7 +467,8 @@ def get_centroid_sequence_reps(model_name, layer, dataset_dir, per_lang, lang, b
 
     # Train kmeans and save the units
     logger.info(f"Training kmeans on segment representations")
-    data = compute_kmeans_reps(data, kmeans_dir = kmeans_dir, output_dir = training_units_dir, n_clusters = 100, save = True)
+    # We pass n_clusters = None: we assume that the Kmeans model has already been trained and saved
+    data = compute_kmeans_reps(data, kmeans_dir = kmeans_dir, output_dir = training_units_dir, n_clusters = None, save = True)
 
     with open(os.path.join(kmeans_dir, f"kmeans_model_centroids.npy"), "rb") as f:
         centroids = np.load(f)
@@ -532,14 +549,8 @@ def map_get_codevectors_reps(batch):
     batch["sequence"] = codevector_reps
     return batch
 
-
-def construct_lid_dataset_codevectors(dataset_dir, per_lang, model_name, layer, batch_size, kmeans_dir, training_units_dir):
-    '''
-    Construct the LID dataset using the KMeans centroids as codevectors
-    Shape of each sample: {"sequence": np.ndarray(shape=(sequence_length,768), dtype=int), "lang": str}
-    '''
-    global centroids
-
+def get_lang2idx_map():
+    '''Get the mapping from language to index'''
     ### CHANGE THIS TO DATASET_DIR
     # langs = os.listdir(training_units_dir)
 
@@ -554,6 +565,17 @@ def construct_lid_dataset_codevectors(dataset_dir, per_lang, model_name, layer, 
     idx2lang = {idx: lang for lang, idx in lang2idx.items()}
     # langs = ["ar", "hi", "en"]
     logger.info(f"Number of languages: {len(langs)}")
+    return lang2idx, idx2lang, langs
+
+def construct_lid_dataset_codevectors(dataset_dir, per_lang, model_name, layer, batch_size, kmeans_dir, training_units_dir):
+    '''
+    Construct the LID dataset using the KMeans centroids as codevectors
+    Shape of each sample: {"sequence": np.ndarray(shape=(sequence_length,768), dtype=int), "lang": str}
+    '''
+    global centroids
+
+    lang2idx, idx2lang, langs = get_lang2idx_map()
+    
     lid_dataset = None
     centroids = None
     for lang in langs:
@@ -657,19 +679,16 @@ def main():
 
     # Get dataset:
     ## For training, we get train, dev, test splits
-    ## For *only* evaluation setting, we only get a test split
+    ## For *only* evaluation setting, we only get a test split from eval_dataset_dir
 
+    lang2idx, idx2lang, _ = get_lang2idx_map()
     # Only load training dataset if we are training
     if not only_eval:
         logger.info("Loading training dataset...")
         lid_dataset, _, idx2lang = construct_lid_dataset_codevectors(dataset_dir, per_lang, model_name, layer, batch_size, kmeans_dir, training_units_dir)
-        train_dataset, dev_dataset, test_dataset = get_dataset_splits(lid_dataset, dev_size = 1000, test_size = 1000)
-        sequence_size = len(train_dataset[0]["sequence"])
+        train_dataset, dev_dataset, test_dataset = get_dataset_splits(lid_dataset, dev_size = 1000, test_size = 10000)
+        # sequence_size = len(train_dataset[0]["sequence"])
         # train_dataset, dev_dataset, test_dataset, _, idx2lang = construct_lid_dataset_codevectors(dataset_dir, per_lang, model_name, layer, batch_size, kmeans_dir, training_units_dir)
-    else:
-        logger.info(f"Evaluating model on eval dataset...")
-        eval_dataset, _, idx2lang = construct_lid_dataset_codevectors(eval_dataset_dir, per_lang, model_name, layer, batch_size, kmeans_dir, eval_units_dir)
-        sequence_size = len(eval_dataset[0]["sequence"])
 
     # Get LID model depending on lid_model_type
 
@@ -723,13 +742,31 @@ def main():
 
         # Evaluate the model
         logger.info(f"Evaluating model on test split of train dataset...")
-        preds, labels, accuracy = lid_model.evaluate(test_dataset)
+        preds, labels, accents, accuracy = lid_model.evaluate(test_dataset)
         logger.info(f"Accuracy: {accuracy}")
 
+        # Save the predictions
+        ## We'll save a list of audio files, their predicted labels, and their true labels
+        # audio_files_test = [item["audio_file"] for item in test_dataset]
+        preds = preds.cpu().numpy()
+        labels = labels.cpu().numpy()
+        # accents = accents.cpu().numpy()
+        preds = [idx2lang[pred] for pred in preds]
+        labels = [idx2lang[label] for label in labels]
+
+        with open(os.path.join(output_dir, "testset_predictions.pkl"), "wb") as f:
+            # pkl.dump({"audio_files": audio_files_test, "preds": preds, "labels": labels}, f)
+            pkl.dump({"preds": preds, "labels": labels, "accents": accents}, f)
+
+
     # Evaluate the model on eval dataset if provided
+
     if eval_dataset_dir:
         logger.info(f"Evaluating model on eval dataset...")
         eval_dataset, _, idx2lang = construct_lid_dataset_codevectors(eval_dataset_dir, per_lang, model_name, layer, batch_size, kmeans_dir, eval_units_dir)
+        sequence_size = len(eval_dataset[0]["sequence"])
+
+        logger.info(f"Evaluating model on eval dataset...")
         preds, labels, accents, accuracy = lid_model.evaluate(eval_dataset)
         logger.info(f"Accuracy: {accuracy}")
 
