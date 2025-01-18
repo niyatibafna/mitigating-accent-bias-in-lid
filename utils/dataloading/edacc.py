@@ -15,7 +15,8 @@ import torch
 import os, sys
 import json
 import random
-torch.ones(1).to("cuda")
+if torch.cuda.is_available():
+    torch.ones(1).to("cuda")
 import torchaudio
 from datasets import load_dataset, concatenate_datasets, Dataset, Audio
 
@@ -50,8 +51,11 @@ def load_edacc(num_samples = None):
     for audio_file in os.listdir(data_path):
         audio_files[audio_file[:-4]], sr = torchaudio.load(os.path.join(data_path, audio_file))
         # audio_files[audio_file[:-4]] = language_id.load_audio(os.path.join(data_path, audio_file))
+        # print(f"Original sampling rate: {sr}")
+        # print(f"Audio len: {audio_files[audio_file[:-4]].size()}")
         if sr != 16000:
             audio_files[audio_file[:-4]] = torchaudio.transforms.Resample(sr, 16000)(audio_files[audio_file[:-4]])
+        # print(f"Audio len: {audio_files[audio_file[:-4]].size()}")
 
     print(f"Loaded {len(audio_files)} audio files")
 
@@ -68,6 +72,7 @@ def load_edacc(num_samples = None):
 
 
     clip_length = 6
+    sr = 16000
     all_data = []
     stm_data = stm_reader(test_stm_path) + stm_reader(dev_stm_path)
     for line in stm_data:
@@ -76,14 +81,14 @@ def load_edacc(num_samples = None):
         signal = signal.squeeze().numpy()
         segment = signal[int(line["start_time"]*sr):int(line["end_time"]*sr)]
         # Filter out signals with less than 6 seconds
-        if segment.shape[0] < clip_length*16000:
+        if segment.shape[0] < clip_length*sr:
             continue
         # Chunk into uniform windows of K seconds
         
-        for i in range(0, len(segment), clip_length*16000):
-            if i+clip_length*16000 > len(segment):
+        for i in range(0, len(segment), clip_length*sr):
+            if i+clip_length*sr > len(segment):
                 break
-            all_data.append({"signal": segment[i:i+clip_length*16000], "lang":"en", \
+            all_data.append({"signal": segment[i:i+clip_length*sr], "lang":"en", \
                 "accent": speaker2lang[line["speaker"]], "audio_file": line["audio_file"]})
 
         # segment = segment[:10*16000]
