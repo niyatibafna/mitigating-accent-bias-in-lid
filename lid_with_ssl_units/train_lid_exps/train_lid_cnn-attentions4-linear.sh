@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 
-#$ -N att_train_lid
+#$ -N att4_train_lid
 #$ -wd /home/hltcoe/nbafna/projects/mitigating-accent-bias-in-lid/
 #$ -m e
-#$ -t 1
+#$ -t 1-4
 #$ -j y -o qsub_logs/train_attentions4_$TASK_ID.out
 
 # Fill out RAM/memory (same thing) request,
@@ -42,7 +42,7 @@ export NCCL_DEBUG=INFO
 # export CUDA_VISIBLE_DEVICES=0,1
 
 model_name="facebook/wav2vec2-base"
-units_all=(100 250 500 750 1000)
+units_all=(500 1000 5000 10000)
 units=${units_all[$SGE_TASK_ID-1]}
 
 model_key="wav2vec2-base-layer8-$units"
@@ -53,8 +53,8 @@ layer=8
 # dataset_dir="/exp/jvillalba/corpora/voxlingua107"
 dataset_dir="vl107"
 # dataset_dir=None
-per_lang=100
-num_epochs=30
+# per_lang=100
+num_epochs=20
 batch_size=(128)
 evaluate_steps=100
 # batch_sizes=(4)

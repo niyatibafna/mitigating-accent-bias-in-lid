@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 
-#$ -N att8_train_lid
+#$ -N vl_xlsr_att4_train_lid
 #$ -wd /home/hltcoe/nbafna/projects/mitigating-accent-bias-in-lid/
 #$ -m e
-#$ -t 1-3
-#$ -j y -o qsub_logs/train_attentions8_$TASK_ID.out
+#$ -t 1
+#$ -j y -o qsub_logs/xlsr_train_attentions4_$TASK_ID.out
 
 # Fill out RAM/memory (same thing) request,
 # the number of GPUs you want,
@@ -41,13 +41,13 @@ export CUDA_LAUNCH_BLOCKING=1
 export NCCL_DEBUG=INFO
 # export CUDA_VISIBLE_DEVICES=0,1
 
-model_name="facebook/wav2vec2-base"
+model_name="facebook/wav2vec2-large-xlsr-53"
 # units_all=(100 250 500 750 1000 3000 10000)
-units_all=(500 1000 10000)
+units_all=(5000)
 units=${units_all[$SGE_TASK_ID-1]}
 
-model_key="wav2vec2-base-layer8-$units"
-layer=8
+model_key="wav2vec2-large-xlsr-53-layer21-$units"
+layer=21
 # model_name="patrickvonplaten/wavlm-libri-clean-100h-base-plus"
 # model_key="wavlm-base-layer8"
 
@@ -60,21 +60,21 @@ batch_size=(128)
 evaluate_steps=100
 # batch_sizes=(4)
 lr=0.0001
-num_attention_layers=8
+num_attention_layers=4
 
 lid_model_type="cnn-attentions-linear"
 
 
-kmeans_dir="/exp/nbafna/projects/mitigating-accent-bias-in-lid/wav2vec2_intermediate_outputs/vl107/$model_key/global_kmeans/"
-training_units_dir="/exp/nbafna/projects/mitigating-accent-bias-in-lid/wav2vec2_intermediate_outputs/vl107/$model_key/training_units/"
-output_dir="/exp/nbafna/projects/mitigating-accent-bias-in-lid/wav2vec2_intermediate_outputs/vl107/$model_key/$lid_model_type-$num_attention_layers/lid_model_outputs/"
+kmeans_dir="/exp/nbafna/projects/mitigating-accent-bias-in-lid/wav2vec2_intermediate_outputs/$dataset_dir/$model_key/global_kmeans/"
+training_units_dir="/exp/nbafna/projects/mitigating-accent-bias-in-lid/wav2vec2_intermediate_outputs/$dataset_dir/$model_key/training_units/"
+output_dir="/exp/nbafna/projects/mitigating-accent-bias-in-lid/wav2vec2_intermediate_outputs/$dataset_dir/$model_key/$lid_model_type-$num_attention_layers/lid_model_outputs/"
 
 logdir="/home/hltcoe/nbafna/projects/mitigating-accent-bias-in-lid/lid_with_ssl_units/train_logs/$model_key/$lid_model_type"
 mkdir -p $logdir
 logfile="$logdir/train_lid_cnn-attentions-$num_attention_layers-linear.log"
 
 eval_dataset_dir="edacc"
-eval_units_dir="/exp/nbafna/projects/mitigating-accent-bias-in-lid/wav2vec2_intermediate_outputs/vl107/$model_key/eval_units/"
+eval_units_dir="/exp/nbafna/projects/mitigating-accent-bias-in-lid/wav2vec2_intermediate_outputs/$dataset_dir/$model_key/eval_units/"
 
 /home/hltcoe/nbafna/.conda/envs/accent_bias/bin/python lid_with_ssl_units/train_lid.py \
     --model_name $model_name \
