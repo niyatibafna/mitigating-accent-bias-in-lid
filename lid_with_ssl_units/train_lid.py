@@ -24,6 +24,7 @@ import re
 # Log to wandb
 import wandb
 import logging
+import json
 
 from argparse import ArgumentParser
 
@@ -342,7 +343,12 @@ class LinearClassifiereonAttentionLayers(PostEncoder):
 
 
     def train(self, train_dataset, dev_dataset, evaluate_steps = None):
-        kmeans_units = int(re.search(r"wav2vec2-base-layer8-(\d+)", self.output_dir).group(1))
+        if "wav2vec2-base-layer8" in self.output_dir:
+            kmeans_units = int(re.search(r"wav2vec2-base-layer8-(\d+)", self.output_dir).group(1))
+        elif "wav2vec2-large-xlsr-53-layer21" in self.output_dir:
+            kmeans_units = int(re.search(r"wav2vec2-large-xlsr-53-layer21-(\d+)", self.output_dir).group(1))
+        else:
+            kmeans_units = None
         wandb.init(project=f"train_lid_on_ssl_attentions-{self.model.num_attention_layers}", config={
             "batch_size": self.batch_size,
             "num_epochs": self.num_epochs,
@@ -549,18 +555,19 @@ def map_get_codevectors_reps(batch):
     batch["sequence"] = codevector_reps
     return batch
 
-def get_lang2idx_map():
+def get_lang2idx_map(dataset_dir):
     '''Get the mapping from language to index'''
+
+    global logger
+
     ### CHANGE THIS TO DATASET_DIR
     # langs = os.listdir(training_units_dir)
 
-    #### Currently hardcoded ; change this #######
-    vl107_dir = "/exp/jvillalba/corpora/voxlingua107"
-    langs = sorted(os.listdir(vl107_dir))
-
-    #### For now, we'll just use langs that have non-empty directories in the output_dir ####
-    # langs = [lang for lang in langs if len(os.listdir(os.path.join(training_units_dir, lang))) > 0]
-
+    if dataset_dir == "vl107":
+        langs_dir = "/exp/jvillalba/corpora/voxlingua107"
+    elif dataset_dir == "fleurs":
+        langs_dir = "/exp/jvillalba/corpora/fleurs/metadata"
+    langs = sorted(os.listdir(langs_dir))
     lang2idx = {lang: idx for idx, lang in enumerate(langs)}
     idx2lang = {idx: lang for lang, idx in lang2idx.items()}
     # langs = ["ar", "hi", "en"]
@@ -574,7 +581,7 @@ def construct_lid_dataset_codevectors(dataset_dir, per_lang, model_name, layer, 
     '''
     global centroids
 
-    lang2idx, idx2lang, langs = get_lang2idx_map()
+    lang2idx, idx2lang, langs = get_lang2idx_map(dataset_dir)
     
     lid_dataset = None
     centroids = None
@@ -681,7 +688,7 @@ def main():
     ## For training, we get train, dev, test splits
     ## For *only* evaluation setting, we only get a test split from eval_dataset_dir
 
-    lang2idx, idx2lang, _ = get_lang2idx_map()
+    lang2idx, idx2lang, _ = get_lang2idx_map(dataset_dir)
     # Only load training dataset if we are training
     if not only_eval:
         logger.info("Loading training dataset...")
@@ -759,6 +766,11 @@ def main():
             pkl.dump({"preds": preds, "labels": labels, "accents": accents}, f)
 
 
+        with open(os.path.join(output_dir, f"eval_accuracy.json"), "w") as f:
+            json.dump({f"{dataset_dir}_test_accuracy": accuracy}, f)
+
+
+
     # Evaluate the model on eval dataset if provided
 
     if eval_dataset_dir:
@@ -783,6 +795,18 @@ def main():
         with open(os.path.join(output_dir, "predictions.pkl"), "wb") as f:
             # pkl.dump({"audio_files": audio_files_test, "preds": preds, "labels": labels}, f)
             pkl.dump({"preds": preds, "labels": labels, "accents": accents}, f)
+
+        # Save accuracy to JSON file
+        if os.path.exists(os.path.join(output_dir, f"eval_accuracy.json")):
+            results = json.load(open(os.path.join(output_dir, f"eval_accuracy.json")))
+        else:
+            results = {}
+        
+        results[f"{eval_dataset_dir}_accuracy"] = accuracy
+
+        with open(os.path.join(output_dir, f"eval_accuracy.json"), "w") as f:
+            json.dump(results, f, indent=4)
+
 
 
 if __name__ == "__main__":
