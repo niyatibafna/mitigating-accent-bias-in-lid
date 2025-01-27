@@ -4,7 +4,7 @@
 #$ -wd /home/hltcoe/nbafna/projects/mitigating-accent-bias-in-lid/prelim_evals
 #$ -m e
 # # $ -t 4
-#$ -j y -o ../qsub_logs/eval_edacc.out
+#$ -j y -o /home/hltcoe/nbafna/projects/mitigating-accent-bias-in-lid/prelim_evals/qsub_logs/eval_edacc.out
 
 # Fill out RAM/memory (same thing) request,
 # the number of GPUs you want,
