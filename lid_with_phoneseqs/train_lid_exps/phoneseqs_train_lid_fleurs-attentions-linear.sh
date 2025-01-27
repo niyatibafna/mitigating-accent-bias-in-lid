@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 
-#$ -N att_ps_train_lid
+#$ -N flr_att_ps_train_lid
 #$ -wd /home/hltcoe/nbafna/projects/mitigating-accent-bias-in-lid/
 #$ -m e
-#$ -t 2
-#$ -j y -o qsub_logs/ps_train_attentions_$TASK_ID.out
+#$ -t 1-2
+#$ -j y -o qsub_logs/ps_fltrain_attentions_$TASK_ID.out
 
 # Fill out RAM/memory (same thing) request,
 # the number of GPUs you want,
@@ -42,10 +42,10 @@ export NCCL_DEBUG=INFO
 # export CUDA_VISIBLE_DEVICES=0,1
 
 model_key="wav2vec2-xlsr-53-espeak-cv-ft"
-dataset_dir="vl107"
+dataset_dir="fleurs"
 # dataset_dir=None
 # per_lang=100
-num_epochs=5
+num_epochs=10
 batch_size=(128)
 evaluate_steps=100
 # batch_sizes=(4)
@@ -82,6 +82,7 @@ eval_dataset_dir="fleurs_test"
     --load_trained_from_dir \
     --only_eval 
     # --per_lang $per_lang \
+    
     # --load_trained_from_dir
 
 echo "Training LID complete"

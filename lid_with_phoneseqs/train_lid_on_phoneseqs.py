@@ -209,7 +209,7 @@ class PhoneseqsLinearClassifiereonAttentionLayers(PostEncoder):
         padding_idx = 0):
         '''If load_from_dir is True, load the model from output_dir. Else, initialize a new model'''
         if load_from_dir:
-            model = torch.load(os.path.join(output_dir, f"phoneseqs_attentions-{self.model.num_attention_layers}_classifier.pth"))
+            model = torch.load(os.path.join(output_dir, f"phoneseqs_attentions-{num_attention_layers}_classifier.pth"))
         else:
             model = AttentionsLinearModel(vocab_size=vocab_size, num_classes=num_classes, \
                                           hidden_size=hidden_size, \
@@ -280,7 +280,7 @@ def get_lang2idx_map(dataset_dir):
     if dataset_dir == "vl107":
         langs_dir = "/exp/jvillalba/corpora/voxlingua107"
     elif dataset_dir == "fleurs":
-        langs_dir = "/exp/jvillalba/corpora/fleurs/metadata"
+        langs_dir = "/export/common/data/corpora/fleurs/metadata"
     langs = sorted(os.listdir(langs_dir))
 
     #### For now, we'll just use langs that have non-empty directories in the output_dir ####
@@ -304,6 +304,15 @@ def map_tokenize_phoneme_labels(batch, phoneme2idx, lang2idx):
             if phoneme in phoneme2idx]
         coded_phoneme_sequences.append(coded_phoneme_sequence)
     batch["sequence"] = coded_phoneme_sequences
+
+    # HACK to handle the case where eval dataset codes don't have training dataset codes
+    ## Since we're only evaluating on English, this only applies to English
+    ## For training languages, this will not be an issue
+    eng_eqv = [lang for lang in lang2idx if "en" in lang][0] # There should be only one
+    for i, lang in enumerate(batch["lang"]):
+        if lang not in lang2idx and "en" in lang:
+            # Replace with the equivalent
+            batch["lang"][i] = eng_eqv
     batch["label"] = [lang2idx[lang] for lang in batch["lang"]]
 
     return batch
@@ -446,7 +455,8 @@ def main():
 
     if eval_dataset_dir:
         logger.info(f"Evaluating model on eval dataset...")
-        eval_dataset = load_phoneseq_dataset(eval_dataset_dir)
+        eval_dataset = load_phoneseq_dataset(eval_dataset_dir, target_code_type = dataset_dir)
+
         eval_dataset = eval_dataset.map(map_tokenize_phoneme_labels, fn_kwargs={"phoneme2idx": phoneme2idx, "lang2idx": lang2idx}, \
             batched=True, \
             batch_size = 1000)
@@ -465,7 +475,7 @@ def main():
         preds = [idx2lang[pred] for pred in preds]
         labels = [idx2lang[label] for label in labels]
 
-        with open(os.path.join(output_dir, "predictions.pkl"), "wb") as f:
+        with open(os.path.join(output_dir, f"{eval_dataset_dir}_predictions.pkl"), "wb") as f:
             # pkl.dump({"audio_files": audio_files_test, "preds": preds, "labels": labels}, f)
             pkl.dump({"preds": preds, "labels": labels, "accents": accents}, f)
         
