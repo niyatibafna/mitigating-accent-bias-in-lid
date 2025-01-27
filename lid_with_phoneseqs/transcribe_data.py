@@ -134,7 +134,9 @@ def main():
     args = parse_args()
     model_name = args.model_name
     dataset_dir = args.dataset_name
-    per_lang = args.per_lang
+    per_lang = args.per_lang # This is number of samples per language for VL107 and FLEURS, 
+                             # number of total samples over all accents for EDACC
+                             # and number of samples per accent for CV 
     lang = args.lang
     batch_size = args.batch_size
     output_dir = args.output_dir
