@@ -443,7 +443,7 @@ def get_centroid_sequence_reps(model_name, layer, dataset_dir, per_lang, lang, b
 
     # Load the model
     logger.info(f"Loading model: {model_name}")
-    processor = AutoProcessor.from_pretrained(model_name)
+    processor = AutoFeatureExtractor.from_pretrained(model_name)
     # feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/wav2vec2-base")
     model = Wav2Vec2ForPreTraining.from_pretrained(model_name)
 
@@ -558,15 +558,13 @@ def map_get_codevectors_reps(batch):
 def get_lang2idx_map(dataset_dir):
     '''Get the mapping from language to index'''
 
-    global logger
-
     ### CHANGE THIS TO DATASET_DIR
     # langs = os.listdir(training_units_dir)
 
     if dataset_dir == "vl107":
         langs_dir = "/exp/jvillalba/corpora/voxlingua107"
     elif dataset_dir == "fleurs":
-        langs_dir = "/exp/jvillalba/corpora/fleurs/metadata"
+        langs_dir = "/export/common/data/corpora/fleurs/metadata"
     langs = sorted(os.listdir(langs_dir))
     lang2idx = {lang: idx for idx, lang in enumerate(langs)}
     idx2lang = {idx: lang for lang, idx in lang2idx.items()}
@@ -574,14 +572,14 @@ def get_lang2idx_map(dataset_dir):
     logger.info(f"Number of languages: {len(langs)}")
     return lang2idx, idx2lang, langs
 
-def construct_lid_dataset_codevectors(dataset_dir, per_lang, model_name, layer, batch_size, kmeans_dir, training_units_dir):
+def construct_lid_dataset_codevectors(dataset_dir, lang2idx, per_lang, model_name, layer, batch_size, kmeans_dir, training_units_dir):
     '''
     Construct the LID dataset using the KMeans centroids as codevectors
     Shape of each sample: {"sequence": np.ndarray(shape=(sequence_length,768), dtype=int), "lang": str}
     '''
     global centroids
-
-    lang2idx, idx2lang, langs = get_lang2idx_map(dataset_dir)
+    langs = list(lang2idx.keys())
+    idx2lang = {idx: lang for lang, idx in lang2idx.items()}
     
     lid_dataset = None
     centroids = None
@@ -616,6 +614,18 @@ def construct_lid_dataset_codevectors(dataset_dir, per_lang, model_name, layer, 
     #     "all_langs": all_langs
     # }
 
+    # We may have a mismatch in language names between the dataset and the lang2idx map
+    ## This happens because lang2idx is based on the training dataset, and we may be loading the eval dataset
+    ## Since this only happens for the eval dataset i.e. for English, we can for now deal with it in a hacky way
+    ## i.e. we first get the equivalent of "en" in the lang2idx map and then replace all instances of "en" in the dataset with the equivalent
+
+    eng_eqv = [lang for lang in lang2idx if "en" in lang][0] # There should be only one
+    for i, lang in enumerate(lid_dataset["all_langs"]):
+        if lang not in lang2idx and "en" in lang:
+            # Replace with the equivalent
+            lid_dataset["all_langs"][i] = eng_eqv
+
+
     # Rename keys
     lid_dataset["sequence"] = lid_dataset["sequences"]
     lid_dataset.pop("sequences")
@@ -635,7 +645,7 @@ def construct_lid_dataset_codevectors(dataset_dir, per_lang, model_name, layer, 
 
     lid_dataset.set_transform(map_get_codevectors_reps, columns=["sequence", "lang", "accent"])
 
-    return lid_dataset, lang2idx, idx2lang
+    return lid_dataset
 
     # train_dataset, dev_dataset, test_dataset = get_dataset_splits(lid_dataset, dev_size = 1000, test_size = 1000)
 
@@ -692,7 +702,7 @@ def main():
     # Only load training dataset if we are training
     if not only_eval:
         logger.info("Loading training dataset...")
-        lid_dataset, _, idx2lang = construct_lid_dataset_codevectors(dataset_dir, per_lang, model_name, layer, batch_size, kmeans_dir, training_units_dir)
+        lid_dataset = construct_lid_dataset_codevectors(dataset_dir, lang2idx, per_lang, model_name, layer, batch_size, kmeans_dir, training_units_dir)
         train_dataset, dev_dataset, test_dataset = get_dataset_splits(lid_dataset, dev_size = 1000, test_size = 10000)
         # sequence_size = len(train_dataset[0]["sequence"])
         # train_dataset, dev_dataset, test_dataset, _, idx2lang = construct_lid_dataset_codevectors(dataset_dir, per_lang, model_name, layer, batch_size, kmeans_dir, training_units_dir)
@@ -707,7 +717,7 @@ def main():
     
     if lid_model_type == "linear":
         # train_dataset, dev_dataset, test_dataset, _, idx2lang = construct_lid_dataset_codevectors(dataset_dir, per_lang, model_name, layer, batch_size, kmeans_dir, training_units_dir)
-        hidden_size = 768
+        hidden_size = 768 if "wav2vec2-base" in model_name else 1024
         num_classes = len(idx2lang)
         logger.info(f"Num classes: {num_classes}")
         lid_model = LinearClassifieronPooledReps(num_classes = num_classes, hidden_size = hidden_size, \
@@ -716,7 +726,7 @@ def main():
 
     elif lid_model_type == "cnn2-linear":
         # train_dataset, dev_dataset, test_dataset, _, idx2lang = construct_lid_dataset_codevectors(dataset_dir, per_lang, model_name, layer, batch_size, kmeans_dir, training_units_dir)
-        hidden_size = 768
+        hidden_size = 768 if "wav2vec2-base" in model_name else 1024
         num_classes = len(idx2lang)
         logger.info(f"Num classes: {num_classes}")
         lid_model = LinearClassifieronCNNs(num_classes=num_classes, sequence_size=sequence_size, hidden_size=hidden_size, \
@@ -724,7 +734,7 @@ def main():
                                            batch_size = batch_size, lr = lr, num_epochs = num_epochs)
     
     elif lid_model_type == "cnn-attentions2-linear":
-        hidden_size = 768
+        hidden_size = 768 if "wav2vec2-base" in model_name else 1024
         num_classes = len(idx2lang)
         logger.info(f"Num classes: {num_classes}")
         lid_model = LinearClassifiereonAttentionLayers(num_classes=num_classes, hidden_size=hidden_size, num_attention_layers=2, attention_dim=128, \
@@ -733,7 +743,7 @@ def main():
 
     elif lid_model_type == "cnn-attentions-linear":
         assert num_attention_layers is not None, "Number of attention layers not provided"
-        hidden_size = 768
+        hidden_size = 768 if "wav2vec2-base" in model_name else 1024
         num_classes = len(idx2lang)
         logger.info(f"Num classes: {num_classes}")
         lid_model = LinearClassifiereonAttentionLayers(num_classes=num_classes, hidden_size=hidden_size, num_attention_layers=num_attention_layers, attention_dim=128, \
@@ -775,7 +785,8 @@ def main():
 
     if eval_dataset_dir:
         logger.info(f"Evaluating model on eval dataset...")
-        eval_dataset, _, idx2lang = construct_lid_dataset_codevectors(eval_dataset_dir, per_lang, model_name, layer, batch_size, kmeans_dir, eval_units_dir)
+        print(f"lang2idx: {lang2idx}")
+        eval_dataset = construct_lid_dataset_codevectors(eval_dataset_dir, lang2idx, per_lang, model_name, layer, batch_size, kmeans_dir, eval_units_dir)
         sequence_size = len(eval_dataset[0]["sequence"])
 
         logger.info(f"Evaluating model on eval dataset...")
@@ -792,7 +803,7 @@ def main():
         preds = [idx2lang[pred] for pred in preds]
         labels = [idx2lang[label] for label in labels]
 
-        with open(os.path.join(output_dir, "predictions.pkl"), "wb") as f:
+        with open(os.path.join(output_dir, f"{eval_dataset_dir}_predictions.pkl"), "wb") as f:
             # pkl.dump({"audio_files": audio_files_test, "preds": preds, "labels": labels}, f)
             pkl.dump({"preds": preds, "labels": labels, "accents": accents}, f)
 
