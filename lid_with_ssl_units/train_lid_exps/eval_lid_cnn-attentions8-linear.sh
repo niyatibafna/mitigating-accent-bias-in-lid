@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
 
-#$ -N eval_att8_lid
+#$ -N cv_eval_att8_lid
 #$ -wd /home/hltcoe/nbafna/projects/mitigating-accent-bias-in-lid/
 #$ -m e
-#$ -t 5
+#$ -t 1-3
 #$ -j y -o qsub_logs/eval_attentions8_$TASK_ID.out
 
 # Fill out RAM/memory (same thing) request,
 # the number of GPUs you want,
 # and the hostnames of the machines for special GPU models.
 #$ -l h_rt=40:00:00,mem_free=20G,gpu=1,hostname=!r8n04&!r9n08&!r7n04
-#$ -hold_jid 12862437
+#$ -hold_jid 12868143
 
 # Submit to GPU queue
 #$ -q gpu.q
@@ -43,7 +43,7 @@ export NCCL_DEBUG=INFO
 # export CUDA_VISIBLE_DEVICES=0,1
 
 model_name="facebook/wav2vec2-base"
-units_all=(100 250 500 750 1000 3000 10000)
+units_all=(500 1000 10000)
 units=${units_all[$SGE_TASK_ID-1]}
 
 model_key="wav2vec2-base-layer8-$units"
@@ -72,8 +72,10 @@ logdir="/home/hltcoe/nbafna/projects/mitigating-accent-bias-in-lid/lid_with_ssl_
 mkdir -p $logdir
 logfile="$logdir/eval_lid_cnn-attentions-$num_attention_layers-linear.log"
 
-eval_dataset_dir="edacc"
-eval_units_dir="/exp/nbafna/projects/mitigating-accent-bias-in-lid/wav2vec2_intermediate_outputs/vl107/$model_key/eval_units/"
+# CHANGE EVAL_UNITS_DIR TOO IF CHANGING THIS: eval_units_dir: eval_units for edacc, cv_eval_units for cv
+# eval_dataset_dir="edacc" 
+eval_dataset_dir="cv"
+eval_units_dir="/exp/nbafna/projects/mitigating-accent-bias-in-lid/wav2vec2_intermediate_outputs/vl107/$model_key/cv_eval_units/"
 
 /home/hltcoe/nbafna/.conda/envs/accent_bias/bin/python lid_with_ssl_units/train_lid.py \
     --model_name $model_name \

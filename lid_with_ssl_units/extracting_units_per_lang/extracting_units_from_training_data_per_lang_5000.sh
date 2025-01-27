@@ -11,7 +11,7 @@
 # the number of GPUs you want,
 # and the hostnames of the machines for special GPU models.
 #$ -l h_rt=10:00:00,mem_free=20G,gpu=1,hostname=!r8n04&!r9n08&!r7n04
-#$ -hold_jid 12862387
+# #$ -hold_jid 12862387
 
 # Submit to GPU queue
 #$ -q gpu.q
@@ -43,11 +43,11 @@ export CUDA_LAUNCH_BLOCKING=1
 export NCCL_DEBUG=INFO
 # export CUDA_VISIBLE_DEVICES=0,1
 
-# model_name="facebook/wav2vec2-base"
-# model_key="wav2vec2-base-layer8"
-model_name="facebook/wav2vec2-large-xlsr-53"
-model_key="wav2vec2-large-xlsr-53-layer$layer"
-layer=21
+model_name="facebook/wav2vec2-base"
+model_key="wav2vec2-base-layer8"
+# model_name="facebook/wav2vec2-large-xlsr-53"
+# model_key="wav2vec2-large-xlsr-53-layer$layer"
+layer=8
 
 # model_name="patrickvonplaten/wavlm-libri-clean-100h-base-plus"
 # model_key="wavlm-base-layer8"

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-#$ -N eval_att_lid
+#$ -N fltest-ev_att4_lid
 #$ -wd /home/hltcoe/nbafna/projects/mitigating-accent-bias-in-lid/
 #$ -m e
 #$ -t 1-3
@@ -9,7 +9,7 @@
 # Fill out RAM/memory (same thing) request,
 # the number of GPUs you want,
 # and the hostnames of the machines for special GPU models.
-#$ -l h_rt=2:00:00,mem_free=20G,gpu=1,hostname=!r8n04&!r9n08&!r7n04
+#$ -l h_rt=10:00:00,mem_free=20G,gpu=1,hostname=!r8n04&!r9n08&!r7n04
 
 # Submit to GPU queue
 #$ -q gpu.q
@@ -56,7 +56,7 @@ dataset_dir="vl107"
 # dataset_dir=None
 # per_lang=None
 num_epochs=200
-batch_size=(512)
+batch_size=(16)
 # batch_sizes=(4)
 lr=0.0001
 num_attention_layers=4
@@ -73,8 +73,11 @@ logdir="/home/hltcoe/nbafna/projects/mitigating-accent-bias-in-lid/lid_with_ssl_
 mkdir -p $logdir
 logfile="$logdir/eval_lid_cnn-attentions-$num_attention_layers-linear.log"
 
-eval_dataset_dir="edacc"
-eval_units_dir="/exp/nbafna/projects/mitigating-accent-bias-in-lid/wav2vec2_intermediate_outputs/vl107/$model_key/eval_units/"
+# CHANGE EVAL_UNITS_DIR TOO IF CHANGING THIS: eval_units_dir: eval_units for edacc, cv_eval_units for cv
+# eval_dataset_dir="edacc" 
+# eval_dataset_dir="cv"
+eval_dataset_dir="fleurs_test"
+eval_units_dir="/exp/nbafna/projects/mitigating-accent-bias-in-lid/wav2vec2_intermediate_outputs/vl107/$model_key/fleurs_test_eval_units/"
 
 /home/hltcoe/nbafna/.conda/envs/accent_bias/bin/python lid_with_ssl_units/train_lid.py \
     --model_name $model_name \
@@ -93,7 +96,7 @@ eval_units_dir="/exp/nbafna/projects/mitigating-accent-bias-in-lid/wav2vec2_inte
     --eval_units_dir $eval_units_dir \
     --only_eval \
     --load_trained_from_dir \
-    # --per_lang $per_lang \
+
 
 echo "Evaluating LID complete"
 

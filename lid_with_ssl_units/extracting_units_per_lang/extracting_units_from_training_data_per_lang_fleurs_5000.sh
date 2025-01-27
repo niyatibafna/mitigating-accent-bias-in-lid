@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
 
-#$ -N test_fl_per_lang10000_extract_training_units
+#$ -N w2v2_fl_per_lang10000_extract_training_units
 #$ -wd /home/hltcoe/nbafna/projects/mitigating-accent-bias-in-lid/
 #$ -m e
 #$ -t 1-102
 #$ -tc 4
-#$ -j y -o qsub_logs/extracting_units_from_training_data_fleurs_5000/$TASK_ID.out
+#$ -j y -o qsub_logs/extracting_units_from_training_data_fleurs_w2v2_5000/$TASK_ID.out
 
 # Fill out RAM/memory (same thing) request,
 # the number of GPUs you want,
 # and the hostnames of the machines for special GPU models.
 #$ -l h_rt=10:00:00,mem_free=20G,gpu=1,hostname=!r8n04&!r9n08&!r7n04
-#$ -hold_jid 12862386
+#$ -hold_jid 12866635
 
 # Submit to GPU queue
 #$ -q gpu.q
@@ -43,11 +43,12 @@ export CUDA_LAUNCH_BLOCKING=1
 export NCCL_DEBUG=INFO
 # export CUDA_VISIBLE_DEVICES=0,1
 
-# model_name="facebook/wav2vec2-base"
-# model_key="wav2vec2-base-layer8"
-model_name="facebook/wav2vec2-large-xlsr-53"
-model_key="wav2vec2-large-xlsr-53-layer$layer"
-layer=21
+model_name="facebook/wav2vec2-base"
+model_key="wav2vec2-base-layer8"
+layer=8
+# model_name="facebook/wav2vec2-large-xlsr-53"
+# model_key="wav2vec2-large-xlsr-53-layer$layer"
+# layer=21
 # model_name="patrickvonplaten/wavlm-libri-clean-100h-base-plus"
 # model_key="wavlm-base-layer8"
 all_langs=$(ls /export/common/data/corpora/fleurs/metadata)

@@ -5,12 +5,12 @@
 # #$ -pe openmpi 8                   # Request 8 CPU cores
 #$ -m e
 #$ -t 6
-#$ -j y -o qsub_logs/xlsr_extracting_units_alllangs_fleurs_$TASK_ID.out
+#$ -j y -o qsub_logs/w2v2_extracting_units_alllangs_fleurs_$TASK_ID.out
 
 # Fill out RAM/memory (same thing) request,
 # the number of GPUs you want,
 # and the hostnames of the machines for special GPU models.
-#$ -l h_rt=60:00:00,mem_free=20G,gpu=1,hostname=!r8n04&!r9n08&!r7n04&!r8n03
+#$ -l h_rt=40:00:00,mem_free=20G,gpu=1,hostname=!r8n04&!r9n08&!r7n04&!r8n03
 
 # Submit to GPU queue
 #$ -q gpu.q
@@ -42,13 +42,14 @@ export CUDA_LAUNCH_BLOCKING=1
 export NCCL_DEBUG=INFO
 # export CUDA_VISIBLE_DEVICES=0,1
 
-# model_name="facebook/wav2vec2-base"
-layer=21
-model_name="facebook/wav2vec2-large-xlsr-53"
-model_key="wav2vec2-large-xlsr-53-layer$layer"
+model_name="facebook/wav2vec2-base"
+# model_name="facebook/wav2vec2-large-xlsr-53"
+# layer=21
+layer=8
+model_key="wav2vec2-base-layer$layer"
+# model_key="facebook/wav2vec2-large-xlsr-53-layer$layer"
+# model_key="wavlm-base-layer$layer"
 # model_name="patrickvonplaten/wavlm-libri-clean-100h-base-plus"
-# model_key="wavlm-base-layer8"
-
 # layer=8
 
 # dataset_dir="/exp/jvillalba/corpora/voxlingua107"
