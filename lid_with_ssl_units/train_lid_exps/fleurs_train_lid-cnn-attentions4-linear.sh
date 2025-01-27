@@ -9,7 +9,7 @@
 # Fill out RAM/memory (same thing) request,
 # the number of GPUs you want,
 # and the hostnames of the machines for special GPU models.
-#$ -l h_rt=60:00:00,mem_free=20G,gpu=1,hostname=!r8n04&!r9n08&!r7n04
+#$ -l h_rt=40:00:00,mem_free=20G,gpu=1,hostname=!r8n04&!r9n08&!r7n04
 
 # Submit to GPU queue
 #$ -q gpu.q
@@ -41,23 +41,22 @@ export CUDA_LAUNCH_BLOCKING=1
 export NCCL_DEBUG=INFO
 # export CUDA_VISIBLE_DEVICES=0,1
 
-model_name="facebook/wav2vec2-large-xlsr-53"
-# units_all=(100 250 500 750 1000 3000 10000)
+# model_name="facebook/wav2vec2-large-xlsr-53"
+model_name="facebook/wav2vec2-base"
 units_all=(5000)
 units=${units_all[$SGE_TASK_ID-1]}
 
-model_key="wav2vec2-large-xlsr-53-layer21-$units"
-layer=21
-# model_name="patrickvonplaten/wavlm-libri-clean-100h-base-plus"
+model_key="wav2vec2-base-layer8-$units"
+layer=8
 # model_key="wavlm-base-layer8"
 
 # dataset_dir="/exp/jvillalba/corpora/voxlingua107"
 dataset_dir="fleurs"
 # dataset_dir=None
 # per_lang=100
-num_epochs=20
-# batch_size=(128)
-batch_size=16 # CHANGE THIS
+num_epochs=10
+batch_size=(128)
+# batch_size=16 # CHANGE THIS
 evaluate_steps=100
 # batch_sizes=(4)
 lr=0.0001
@@ -75,7 +74,7 @@ mkdir -p $logdir
 logfile="$logdir/train_lid_cnn-attentions-$num_attention_layers-linear.log"
 
 eval_dataset_dir="edacc"
-eval_units_dir="/exp/nbafna/projects/mitigating-accent-bias-in-lid/wav2vec2_intermediate_outputs/$dataset_dir/$model_key/eval_units/"
+eval_units_dir="/exp/nbafna/projects/mitigating-accent-bias-in-lid/wav2vec2_intermediate_outputs/$dataset_dir/$model_key/${eval_dataset_dir}_eval_units/"
 
 /home/hltcoe/nbafna/.conda/envs/accent_bias/bin/python lid_with_ssl_units/train_lid.py \
     --model_name $model_name \
@@ -93,8 +92,8 @@ eval_units_dir="/exp/nbafna/projects/mitigating-accent-bias-in-lid/wav2vec2_inte
     --num_attention_layers $num_attention_layers \
     --eval_dataset_dir $eval_dataset_dir \
     --eval_units_dir $eval_units_dir \
-    --load_trained_from_dir \
-    --only_eval
+    # --load_trained_from_dir \
+    # --only_eval
     # --load_trained_from_dir
     # --per_lang $per_lang \
     # --only_eval \

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-#$ -N vl_xlsr_att4_train_lid
+#$ -N vl_xlsr_att8_train_lid
 #$ -wd /home/hltcoe/nbafna/projects/mitigating-accent-bias-in-lid/
 #$ -m e
 #$ -t 1
@@ -57,10 +57,11 @@ dataset_dir="vl107"
 # per_lang=100
 num_epochs=20
 batch_size=(128)
+# batch_size=16 # CHANGE THIS
 evaluate_steps=100
 # batch_sizes=(4)
 lr=0.0001
-num_attention_layers=4
+num_attention_layers=8
 
 lid_model_type="cnn-attentions-linear"
 
@@ -92,6 +93,8 @@ eval_units_dir="/exp/nbafna/projects/mitigating-accent-bias-in-lid/wav2vec2_inte
     --num_attention_layers $num_attention_layers \
     --eval_dataset_dir $eval_dataset_dir \
     --eval_units_dir $eval_units_dir \
+    # --load_trained_from_dir \
+    # --only_eval
     # --load_trained_from_dir
     # --per_lang $per_lang \
     # --only_eval \

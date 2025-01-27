@@ -3,7 +3,7 @@
 #$ -N att4_train_lid
 #$ -wd /home/hltcoe/nbafna/projects/mitigating-accent-bias-in-lid/
 #$ -m e
-#$ -t 1-4
+#$ -t 3
 #$ -j y -o qsub_logs/train_attentions4_$TASK_ID.out
 
 # Fill out RAM/memory (same thing) request,

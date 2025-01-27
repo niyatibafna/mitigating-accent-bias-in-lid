@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 
-#$ -N fl_xlsr_att4_train_lid
+#$ -N eval_vl_xlsr_att4_train_lid
 #$ -wd /home/hltcoe/nbafna/projects/mitigating-accent-bias-in-lid/
 #$ -m e
-#$ -t 1
-#$ -j y -o qsub_logs/fleurs_xlsr_train_attentions4_$TASK_ID.out
+#$ -t 1-2
+#$ -j y -o qsub_logs/eval_xlsr_train_attentions4_$TASK_ID.out
 
 # Fill out RAM/memory (same thing) request,
 # the number of GPUs you want,
@@ -52,7 +52,7 @@ layer=21
 # model_key="wavlm-base-layer8"
 
 # dataset_dir="/exp/jvillalba/corpora/voxlingua107"
-dataset_dir="fleurs"
+dataset_dir="vl107"
 # dataset_dir=None
 # per_lang=100
 num_epochs=20
@@ -74,8 +74,9 @@ logdir="/home/hltcoe/nbafna/projects/mitigating-accent-bias-in-lid/lid_with_ssl_
 mkdir -p $logdir
 logfile="$logdir/train_lid_cnn-attentions-$num_attention_layers-linear.log"
 
-eval_dataset_dir="edacc"
-eval_units_dir="/exp/nbafna/projects/mitigating-accent-bias-in-lid/wav2vec2_intermediate_outputs/$dataset_dir/$model_key/eval_units/"
+eval_dataset_dirs=("fleurs_test" "cv")
+eval_dataset_dir=${eval_dataset_dirs[$SGE_TASK_ID-1]}
+eval_units_dir="/exp/nbafna/projects/mitigating-accent-bias-in-lid/wav2vec2_intermediate_outputs/$dataset_dir/$model_key/$eval_dataset_dir_eval_units/"
 
 /home/hltcoe/nbafna/.conda/envs/accent_bias/bin/python lid_with_ssl_units/train_lid.py \
     --model_name $model_name \

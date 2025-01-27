@@ -9,7 +9,7 @@
 # Fill out RAM/memory (same thing) request,
 # the number of GPUs you want,
 # and the hostnames of the machines for special GPU models.
-#$ -l h_rt=60:00:00,mem_free=20G,gpu=1,hostname=!r8n04&!r9n08&!r7n04
+#$ -l h_rt=40:00:00,mem_free=20G,gpu=1,hostname=!r8n04&!r9n08&!r7n04
 
 # Submit to GPU queue
 #$ -q gpu.q
@@ -55,7 +55,7 @@ layer=8
 dataset_dir="vl107"
 # dataset_dir=None
 # per_lang=100
-num_epochs=20
+num_epochs=30
 batch_size=(128)
 evaluate_steps=100
 # batch_sizes=(4)
@@ -73,7 +73,9 @@ logdir="/home/hltcoe/nbafna/projects/mitigating-accent-bias-in-lid/lid_with_ssl_
 mkdir -p $logdir
 logfile="$logdir/train_lid_cnn-attentions-$num_attention_layers-linear.log"
 
-eval_dataset_dir="edacc"
+# CHANGE EVAL_UNITS_DIR TOO IF CHANGING THIS: eval_units_dir: eval_units for edacc, cv_eval_units for cv
+eval_dataset_dir="edacc" 
+# eval_dataset_dir="cv"
 eval_units_dir="/exp/nbafna/projects/mitigating-accent-bias-in-lid/wav2vec2_intermediate_outputs/vl107/$model_key/eval_units/"
 
 /home/hltcoe/nbafna/.conda/envs/accent_bias/bin/python lid_with_ssl_units/train_lid.py \
