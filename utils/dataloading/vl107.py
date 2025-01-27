@@ -75,8 +75,8 @@ def map_create_audio_chunks(batch, clip_length = 6):
     # Remove empty or too short signals
     audio_paths = [audio_paths[idx] for idx, signal in enumerate(signals) if len(signal) >= clip_length*16000]
     langs = [langs[idx] for idx, signal in enumerate(signals) if len(signal) >= clip_length*16000]
-    signals = [signal for signal in signals if len(signal) >= clip_length*16000]
     accents = [accents[idx] for idx, signal in enumerate(signals) if len(signal) >= clip_length*16000]
+    signals = [signal for signal in signals if len(signal) >= clip_length*16000]
 
     # Create appropriate copies of audio paths and langs
     audio_paths = [audio_paths[idx] for idx, signal in enumerate(signals) for _ in range(len(signal)//(clip_length*16000))]
@@ -89,12 +89,11 @@ def map_create_audio_chunks(batch, clip_length = 6):
     signals = np.array(signals)
     signals = signals.reshape(-1, clip_length*16000).tolist()
 
-    assert len(signals) == len(langs) == len(audio_paths), "Lengths of signals, langs and audio_paths do not match"
+    assert len(signals) == len(langs) == len(audio_paths) == len(accents), "Lengths of signals, langs, accents, and audio_paths do not match"
 
     chunked_audio_data = {"signal": signals, "lang": langs, "audio_file": audio_paths, "accent": accents}
 
     return chunked_audio_data
-
 
 
 
@@ -112,9 +111,9 @@ def load_vl107_lang(lang = None, per_lang = None, vl107_dir = "/exp/jvillalba/co
 
     lang_dataset = Dataset.from_dict({"signal": [f"{vl107_dir}/{audio}" for audio in files], "lang": [lang]*len(files), "accent": ["-"]*len(files)}).cast_column("signal", Audio(sampling_rate=16_000))
     
-    # lang_dataset = lang_dataset.map(map_create_audio_chunks, batched=True, batch_size = 100, \
-    #                                 num_proc = 4, keep_in_memory=False, writer_batch_size=100)
-    lang_dataset = lang_dataset.map(map_create_audio_chunks, batched=True, batch_size = 100)
+    lang_dataset = lang_dataset.map(map_create_audio_chunks, batched=True, batch_size = 100, \
+                                    num_proc = 2, keep_in_memory=False, writer_batch_size=100)
+    # lang_dataset = lang_dataset.map(map_create_audio_chunks, batched=True, batch_size = 100)
     
 
     # lang_dataset = Dataset.from_dict({"signal": [f["signal"]["array"] for f in lang_dataset], \
