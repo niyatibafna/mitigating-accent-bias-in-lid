@@ -12,7 +12,7 @@ import pickle as pkl
 sys.path.append("/home/hltcoe/nbafna/projects/mitigating-accent-bias-in-lid/utils/dataloading/")
 from dataset_loader import load_lid_dataset
 
-dataset_name = "fleurs_test"
+dataset_name = "edacc"
 lang = sys.argv[1]
 output_dir = f"/home/hltcoe/nbafna/projects/mitigating-accent-bias-in-lid/prelim_evals/preds/{dataset_name}_predictions/"
 os.makedirs(output_dir, exist_ok = True)
