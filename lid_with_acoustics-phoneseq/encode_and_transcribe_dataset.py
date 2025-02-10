@@ -127,21 +127,21 @@ def map_transcribe(batch, transcriber_model, processor = None):
     return batch
     
 
-def main(transcriber_model, encoder_model, dataset_dir, per_lang, lang, batch_size, output_dir, log_file=None):
+def main(transcriber_model, encoder_model, dataset_dir, per_lang, lang, batch_size, output_dir, log_file=None, rewrite=False):
 
     global logger
+    logger = get_logger(log_file)
 
     outfile = os.path.join(output_dir, f"{lang}_transcriptions.jsonl")
     # Load the dataset if it exists
-    if os.path.exists(outfile):
-        logger.info(f"Dataset {outfile} already exists")
+    if os.path.exists(outfile) and not rewrite:
+        if logger:
+            logger.info(f"Dataset {outfile} already exists")
+        print(f"Dataset {outfile} already exists")
         dataset = load_dataset("json", data_files = outfile)
 
-        return dataset
+        return dataset["train"]
 
-    
-    logger = get_logger(log_file)
-    
         # Load the dataset
     if logger:
         logger.info(f"Loading dataset: {dataset_dir}")
@@ -160,8 +160,9 @@ def main(transcriber_model, encoder_model, dataset_dir, per_lang, lang, batch_si
         from speechbrain.inference.classifiers import EncoderClassifier
 
         encoder = EncoderClassifier.from_hparams(source="speechbrain/lang-id-voxlingua107-ecapa", savedir="tmp", run_opts={"device":"cuda"})
+        print(f"Calculating acoustic representations for {len(dataset)} samples")
         dataset = dataset.map(map_encode_audio, fn_kwargs = {"model_name": encoder_model, "model": encoder}, \
-                            batched=True, batch_size=batch_size)
+                            batched=True, batch_size=64)
 
 
 
@@ -174,15 +175,16 @@ def main(transcriber_model, encoder_model, dataset_dir, per_lang, lang, batch_si
     # processor = AutoProcessor.from_pretrained(model_name)
     transcriber_processor = Wav2Vec2Processor.from_pretrained(transcriber_model)
     # "facebook/wav2vec2-xlsr-53-espeak-cv-ft"
-    
+    print(f"Preparing dataset with processor for {transcriber_model}")
     dataset = dataset.map(prepare_dataset, fn_kwargs = {"processor": transcriber_processor} , \
                           batched=True, batch_size=batch_size, \
-                            remove_columns=["signal"])
+                          num_proc=4, writer_batch_size=100, keep_in_memory=False, remove_columns=["signal"])
 
     
     model = Wav2Vec2ForCTC.from_pretrained(transcriber_model)
     model.eval()
     model.to(device)
+    print(f"Transcribing {len(dataset)} samples")
     dataset = dataset.map(map_transcribe, fn_kwargs = {"transcriber_model": model, "processor": transcriber_processor}, \
                             batched=True, batch_size=batch_size, \
                             remove_columns=["input_values"])
