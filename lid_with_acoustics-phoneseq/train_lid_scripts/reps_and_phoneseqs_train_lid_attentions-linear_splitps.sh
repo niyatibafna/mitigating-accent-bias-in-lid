@@ -58,12 +58,13 @@ evaluate_steps=100
 # batch_sizes=(4)
 lr=0.0001
 num_attention_layers_all=(4 8)
-num_attention_layers=${num_attention_layers_all[$SGE_TASK_ID-1]}
+# num_attention_layers=${num_attention_layers_all[$SGE_TASK_ID-1]}
+num_attention_layers=8
 
 lid_model_type="attentions-linear"
 
 
-output_dir="/exp/nbafna/projects/mitigating-accent-bias-in-lid/reps-phoneseq_exps/$dataset_dir/$model_key/$lid_model_type-$num_attention_layers/reps-phoneseq_lid_model_outputs/"
+output_dir="/exp/nbafna/projects/mitigating-accent-bias-in-lid/reps-phoneseq_exps/$dataset_dir/$model_key/$lid_model_type-$num_attention_layers/reps-phoneseq_lid_model_outputs_splitps/"
 mkdir -p $output_dir
 
 logdir="/home/hltcoe/nbafna/projects/mitigating-accent-bias-in-lid/lid_with_reps-phoneseqs/train_logs/$model_key/$lid_model_type"
@@ -72,7 +73,9 @@ logfile="$logdir/train_lid_attentions-$num_attention_layers-linear.log"
 
 # eval_dataset_dir="edacc"
 # eval_dataset_dir="cv"
-eval_dataset_dir="fleurs_test"
+# eval_dataset_dir="fleurs_test"
+eval_dataset_dirs=("edacc" "cv")
+eval_dataset_dir=${eval_dataset_dirs[$SGE_TASK_ID-1]}
 save_eval_dataset_dir="/exp/nbafna/projects/mitigating-accent-bias-in-lid/reps_and_phoneseqs/$eval_dataset_dir/$model_key/"
 mkdir -p $save_eval_dataset_dir
 

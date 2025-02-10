@@ -1,18 +1,18 @@
 #!/usr/bin/env bash
 
-#$ -N reps-ps_train_lid
+#$ -N eval_dists-reps
 #$ -wd /home/hltcoe/nbafna/projects/mitigating-accent-bias-in-lid/
 #$ -m e
-#$ -t 1-2
-#$ -j y -o qsub_logs/reps-ps_train_attentions_$TASK_ID.out
+#$ -t 1-3
+#$ -j y -o qsub_logs/eval_dists-ps_$TASK_ID.out
 
 # Fill out RAM/memory (same thing) request,
 # the number of GPUs you want,
 # and the hostnames of the machines for special GPU models.
-#$ -l h_rt=40:00:00,mem_free=20G,gpu=1,hostname=!r8n04&!r9n08&!r7n04
+#$ -l h_rt=00:59:00,mem_free=20G,gpu=1,hostname=!r8n04&!r9n08&!r7n04
 
 # Submit to GPU queue
-#$ -q gpu.q
+#$ -q gpu_short.q
 
 source ~/.bashrc
 which python
@@ -57,27 +57,30 @@ batch_size=(128)
 evaluate_steps=100
 # batch_sizes=(4)
 lr=0.0001
-num_attention_layers_all=(4 8)
-num_attention_layers=${num_attention_layers_all[$SGE_TASK_ID-1]}
+# num_attention_layers_all=(4 8)
+num_attention_layers=8
 
 lid_model_type="attentions-linear"
 
+# lid_model_dir="/exp/nbafna/projects/mitigating-accent-bias-in-lid/phoneseq_exps/$dataset_dir/$model_key/$lid_model_type-$num_attention_layers/phoneseq_lid_model_outputs/"
+lid_model_dir="/exp/nbafna/projects/mitigating-accent-bias-in-lid/phoneseq_exps/vl107/wav2vec2-xlsr-53-espeak-cv-ft/attentions-linear-8/phoneseq_lid_model_outputs/"
 
-output_dir="/exp/nbafna/projects/mitigating-accent-bias-in-lid/reps-phoneseq_exps/$dataset_dir/$model_key/$lid_model_type-$num_attention_layers/reps-phoneseq_lid_model_outputs/"
+output_dir="/exp/nbafna/projects/mitigating-accent-bias-in-lid/dists-phoneseq-systemcombo_exps/$dataset_dir/$model_key/$lid_model_type-$num_attention_layers/lid_model_outputs/"
 mkdir -p $output_dir
 
-logdir="/home/hltcoe/nbafna/projects/mitigating-accent-bias-in-lid/lid_with_reps-phoneseqs/train_logs/$model_key/$lid_model_type"
+logdir="/home/hltcoe/nbafna/projects/mitigating-accent-bias-in-lid/lid_with_dists-phoneseqs/train_logs/$model_key/$lid_model_type"
 mkdir -p $logdir
 logfile="$logdir/train_lid_attentions-$num_attention_layers-linear.log"
 
 # eval_dataset_dir="edacc"
 # eval_dataset_dir="cv"
-eval_dataset_dir="fleurs_test"
-save_eval_dataset_dir="/exp/nbafna/projects/mitigating-accent-bias-in-lid/reps_and_phoneseqs/$eval_dataset_dir/$model_key/"
+eval_dataset_dirs=("fleurs_test" "cv" "edacc")
+eval_dataset_dir=${eval_dataset_dirs[$SGE_TASK_ID-1]}
+save_eval_dataset_dir="/exp/nbafna/projects/mitigating-accent-bias-in-lid/dists_and_phoneseqs/$eval_dataset_dir/$model_key/"
 mkdir -p $save_eval_dataset_dir
 
 
-/home/hltcoe/nbafna/.conda/envs/accent_bias/bin/python /home/hltcoe/nbafna/projects/mitigating-accent-bias-in-lid/lid_with_acoustics-phoneseq/train_lid_with_acoustics_phoneseq.py \
+/home/hltcoe/nbafna/.conda/envs/accent_bias/bin/python /home/hltcoe/nbafna/projects/mitigating-accent-bias-in-lid/lid_with_acoustics-phoneseq/system_combination_reps_phoneseqs.py \
     --dataset_name $dataset_dir \
     --save_dataset_dir $save_dataset_dir \
     --transcriber_model $transcriber_model \
@@ -88,6 +91,7 @@ mkdir -p $save_eval_dataset_dir
     --lr $lr \
     --output_dir $output_dir \
     --lid_model_type $lid_model_type \
+    --lid_model_dir $lid_model_dir \
     --logfile $logfile \
     --num_attention_layers $num_attention_layers \
     --eval_dataset_name $eval_dataset_dir \
