@@ -38,6 +38,7 @@ class KMeansOnUnits:
                     print(f"WARNING: Number of centroids in the trained model ({n_centroids}) is different from the number of clusters ({self.n_clusters})")
                 self.kmeans.index.add(centroids)  # Add the centroids to the index
                 self.trained = True
+                self.dim = centroids.shape[1]
 
         else:
             print(f"Trained kmeans model not found in {self.output_dir}. Initializing a new model...")
@@ -80,7 +81,10 @@ class KMeansOnUnits:
         for segment_reps in all_segment_reps:
             # kmeans_reps.append(self.kmeans.predict(segment_reps))
             # This is for faiss kmeans
-            segment_reps = segment_reps.cpu().numpy()
+            # Only move to CPU if tensor
+            if not type(segment_reps) == np.ndarray:
+                # Move to CPU and convert to numpy
+                segment_reps = segment_reps.cpu().numpy()
             segment_reps = segment_reps.reshape(-1, self.dim)
             D, I = self.kmeans.index.search(segment_reps, 1)
             kmeans_reps.append(I.reshape(-1))
