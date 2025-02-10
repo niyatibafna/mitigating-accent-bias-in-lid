@@ -4,9 +4,8 @@
 #$ -wd /home/hltcoe/nbafna/projects/mitigating-accent-bias-in-lid/
 # #$ -pe openmpi 8                   # Request 8 CPU cores
 #$ -m e
-#$ -t 1-107
-#$ -tc 6
-#$ -j y -o qsub_logs/encode_and_transcribe_vl107/$TASK_ID.out
+#$ -t 1-2
+#$ -j y -o qsub_logs/encode_and_transcribe_edacc/$TASK_ID.out
 
 # Fill out RAM/memory (same thing) request,
 # the number of GPUs you want,
@@ -48,14 +47,14 @@ transcriber_model="facebook/wav2vec2-xlsr-53-espeak-cv-ft"
 model_key="ecapa-tdnn_wav2vec2-xlsr-53-espeak-cv-ft"
 
 # dataset_dir="/exp/jvillalba/corpora/voxlingua107"
-dataset_dir="vl107"
+dataset_dirs=("edacc" "cv")
+dataset_dir=${dataset_dirs[$SGE_TASK_ID-1]}
 # dataset_dir=None
 # per_lang=200
 batch_size=16
 
-all_langs=$(ls /exp/jvillalba/corpora/voxlingua107)
-all_langs=($all_langs)
-lang=${all_langs[$SGE_TASK_ID-1]}
+
+lang=en
 
 output_dir="/exp/nbafna/projects/mitigating-accent-bias-in-lid/reps_and_phoneseqs/$dataset_dir/$model_key/"
 mkdir -p $output_dir

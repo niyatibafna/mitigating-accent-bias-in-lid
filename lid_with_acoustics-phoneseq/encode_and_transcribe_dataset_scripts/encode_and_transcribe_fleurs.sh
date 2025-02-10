@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
 
-#$ -N vl_enc_transcribe
+#$ -N fl_enc_transcribe
 #$ -wd /home/hltcoe/nbafna/projects/mitigating-accent-bias-in-lid/
 # #$ -pe openmpi 8                   # Request 8 CPU cores
 #$ -m e
 #$ -t 1-107
-#$ -tc 6
+#$ -tc 4
 #$ -j y -o qsub_logs/encode_and_transcribe_vl107/$TASK_ID.out
 
 # Fill out RAM/memory (same thing) request,
 # the number of GPUs you want,
 # and the hostnames of the machines for special GPU models.
-#$ -l h_rt=10:00:00,mem_free=20G,gpu=1,hostname=!r8n04&!r9n08&!r7n04&!r8n03&!r5n11
+#$ -l h_rt=10:00:00,mem_free=20G,gpu=1,hostname=!r8n04&!r9n08&!r7n04&!r8n03&!r5n11&!r2n03
 
 # Submit to GPU queue
 #$ -q gpu.q
@@ -48,7 +48,7 @@ transcriber_model="facebook/wav2vec2-xlsr-53-espeak-cv-ft"
 model_key="ecapa-tdnn_wav2vec2-xlsr-53-espeak-cv-ft"
 
 # dataset_dir="/exp/jvillalba/corpora/voxlingua107"
-dataset_dir="vl107"
+dataset_dir="fleurs_test"
 # dataset_dir=None
 # per_lang=200
 batch_size=16

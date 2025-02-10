@@ -52,7 +52,7 @@ def get_logger(filename):
     return logger
 
 
-class AttentionsLinearModel(torch.nn.Module):
+class RepsPhoneseqsAttentionsLinearModel(torch.nn.Module):
 
     def __init__(self, vocab_size, num_classes, hidden_size, num_attention_layers, attention_dim, reps_dim, padding_idx):
 
@@ -73,7 +73,7 @@ class AttentionsLinearModel(torch.nn.Module):
         accents: [batch_size] (strings)
         '''
 
-        super(AttentionsLinearModel, self).__init__()
+        super(RepsPhoneseqsAttentionsLinearModel, self).__init__()
         # Model architecture: input --> embedding --> linear --> transformer layers --> linear
         self.padding_idx = padding_idx
         self.embedding = torch.nn.Embedding(vocab_size, hidden_size, padding_idx=padding_idx)
@@ -81,6 +81,7 @@ class AttentionsLinearModel(torch.nn.Module):
         self.hidden_size = hidden_size
         self.num_attention_layers = num_attention_layers
         self.attention_dim = attention_dim
+        self.reps_dim = reps_dim
 
         self.linear_input = torch.nn.Linear(hidden_size, attention_dim)
 
@@ -125,6 +126,11 @@ class AttentionsLinearModel(torch.nn.Module):
 
         # Now, we concatenate the acoustic representations with the attention vectors
         reps = input[1]
+        # Standardize the representations 
+        reps = reps / reps.norm(dim=1, keepdim=True)
+        # Standardize the attention vectors
+        x = x / x.norm(dim=1, keepdim=True)
+
         x = torch.cat([x, reps], dim=1)
         # x: [batch_size, attention_dim + reps_dim]
         x = self.linear_output(x)
@@ -234,35 +240,35 @@ class PostEncoder:
         torch.save(self.model, os.path.join(self.output_dir, model_filename))
 
 
-class PhoneseqsLinearClassifiereonAttentionLayers(PostEncoder):
+class RepsPhoneseqsLinearClassifiereonAttentionLayers(PostEncoder):
 
     def __init__(self, vocab_size, num_classes, hidden_size, num_attention_layers, attention_dim, load_from_dir = False,  output_dir = None, batch_size = None, lr = None, num_epochs = None, \
-        padding_idx = 0):
+        reps_dim = None, padding_idx = 0):
         '''If load_from_dir is True, load the model from output_dir. Else, initialize a new model'''
         if load_from_dir:
-            model = torch.load(os.path.join(output_dir, f"phoneseqs_attentions-{num_attention_layers}_classifier.pth"))
+            model = torch.load(os.path.join(output_dir, f"reps-phoneseqs_attentions-{num_attention_layers}_classifier.pth"))
         else:
-            model = AttentionsLinearModel(vocab_size=vocab_size, num_classes=num_classes, \
+            model = RepsPhoneseqsAttentionsLinearModel(vocab_size=vocab_size, num_classes=num_classes, \
                                           hidden_size=hidden_size, \
                                             num_attention_layers=num_attention_layers, \
                                             attention_dim=attention_dim, \
-                                                padding_idx=padding_idx)
+                                            reps_dim=reps_dim, padding_idx=padding_idx)
         
         self.model = model.cuda()
-
         super().__init__(load_from_dir, output_dir, batch_size, lr, num_epochs, padding_idx)
         
 
 
     def train(self, train_dataset, dev_dataset, evaluate_steps = None):
 
-        wandb.init(project=f"train_lid_on_phoneseqs_attentions", config={
+        wandb.init(project=f"train_lid_on_reps_phoneseqs_attentions", config={
             "batch_size": self.batch_size,
             "num_epochs": self.num_epochs,
             "learning_rate": self.lr,
             "num_attention_layers": self.model.num_attention_layers,
             "attention_dim": self.model.attention_dim,
             "hidden_size": self.model.hidden_size,
+            "reps_dim": self.model.reps_dim,
             "output_dir": self.output_dir,
         })
         super().train(train_dataset, dev_dataset, collate_fn, evaluate_steps)
@@ -276,7 +282,7 @@ class PhoneseqsLinearClassifiereonAttentionLayers(PostEncoder):
         return super().evaluate(test_dataset, collate_fn)
     
     def save(self):
-        super().save(f"phoneseqs_attentions-{self.model.num_attention_layers}_classifier.pth")
+        super().save(f"reps-phoneseqs_attentions-{self.model.num_attention_layers}_classifier.pth")
 
 
 
@@ -344,6 +350,9 @@ def map_tokenize_phoneme_labels(batch, phoneme2idx, lang2idx):
     phoneme_sequences = batch["phone_sequence"]
     coded_phoneme_sequences = []
     for phoneme_sequence in phoneme_sequences:
+        ###### THIS IS THE SPLIT-PS VERSION #######
+        phoneme_sequence = phoneme_sequence.split()
+        #----------------
         coded_phoneme_sequence = [phoneme2idx[phoneme] for phoneme in phoneme_sequence \
             if phoneme in phoneme2idx]
         coded_phoneme_sequences.append(coded_phoneme_sequence)
@@ -376,7 +385,7 @@ def collate_fn(batch):
     padded_sequences = torch.nn.utils.rnn.pad_sequence(truncated_sequences, batch_first=True, padding_value=padding_idx)
 
     # Preparing acoustic representations
-    reps = [item["reps"] for item in batch]
+    reps = [torch.tensor(item["reps"]) for item in batch]
     reps = torch.stack(reps)
 
     # Input is a tuple of (padded_sequences, reps)
@@ -463,7 +472,7 @@ def main():
     num_attention_layers = args.num_attention_layers
 
     only_eval = args.only_eval
-    eval_dataset_name = args.eval_dataset_dir
+    eval_dataset_name = args.eval_dataset_name
     save_eval_dataset_dir = args.save_eval_dataset_dir
 
     logger = get_logger(args.logfile)
@@ -482,6 +491,9 @@ def main():
             dataset_name=dataset_name, langs=langs, per_lang=per_lang, batch_size=batch_size, output_dir=save_dataset_dir, \
                 log_file=None)
 
+        # lid_dataset = lid_dataset.select(range(5000)) # For debugging
+
+        lid_dataset = lid_dataset.filter(lambda x: len(x["phone_sequence"]) > 0)
         # Get the mapping from language to index
         ## Convert the phonetic sequences to integers, and map the languages to integers
         lid_dataset = lid_dataset.map(map_tokenize_phoneme_labels, fn_kwargs={"phoneme2idx": phoneme2idx, "lang2idx": lang2idx}, \
@@ -490,6 +502,8 @@ def main():
         
         # Split the dataset into training and validation
         train_dataset, dev_dataset, test_dataset = get_dataset_splits(lid_dataset, dev_size = 1000, test_size = 10000)
+        ### CHANGE THIS
+        # train_dataset, dev_dataset, test_dataset = get_dataset_splits(lid_dataset, dev_size = 500, test_size = 500)
     
 
     assert lid_model_type in ["attentions-linear"], "Invalid LID model type"
@@ -502,13 +516,14 @@ def main():
 
         vocab_size = len(phoneme2idx)
         hidden_size = 256
+        reps_dim = 256 # train_dataset[0]["reps"].shape[0]
         num_classes = len(idx2lang)
         logger.info(f"Num classes: {num_classes}")
-        lid_model = PhoneseqsLinearClassifiereonAttentionLayers(vocab_size=vocab_size, num_classes=num_classes, \
+        lid_model = RepsPhoneseqsLinearClassifiereonAttentionLayers(vocab_size=vocab_size, num_classes=num_classes, \
                                 hidden_size=hidden_size, num_attention_layers=num_attention_layers, \
                                     attention_dim=128, \
                                     load_from_dir = load_trained_from_dir, output_dir = output_dir, \
-                                    batch_size = batch_size, lr = lr, num_epochs = num_epochs)
+                                    batch_size = batch_size, lr = lr, num_epochs = num_epochs, reps_dim=reps_dim, padding_idx=0)
 
     
     
@@ -543,7 +558,7 @@ def main():
 
     if eval_dataset_name:
         logger.info(f"Evaluating model on eval dataset...")
-        lid_dataset = load_reps_and_phoneseq_dataset(transcriber_model=transcriber_model, encoder_model=encoder_model, \
+        eval_dataset = load_reps_and_phoneseq_dataset(transcriber_model=transcriber_model, encoder_model=encoder_model, \
             dataset_name=eval_dataset_name, langs=langs, per_lang=per_lang, batch_size=batch_size, output_dir=save_eval_dataset_dir, \
                 log_file=None)
 
