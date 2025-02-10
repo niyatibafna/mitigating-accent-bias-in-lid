@@ -76,7 +76,7 @@ logfile="$logdir/train_lid_cnn-attentions-$num_attention_layers-linear.log"
 
 eval_dataset_dirs=("fleurs_test" "cv")
 eval_dataset_dir=${eval_dataset_dirs[$SGE_TASK_ID-1]}
-eval_units_dir="/exp/nbafna/projects/mitigating-accent-bias-in-lid/wav2vec2_intermediate_outputs/$dataset_dir/$model_key/$eval_dataset_dir_eval_units/"
+eval_units_dir="/exp/nbafna/projects/mitigating-accent-bias-in-lid/wav2vec2_intermediate_outputs/$dataset_dir/$model_key/${eval_dataset_dir}_eval_units/"
 
 /home/hltcoe/nbafna/.conda/envs/accent_bias/bin/python lid_with_ssl_units/train_lid.py \
     --model_name $model_name \
