@@ -111,9 +111,9 @@ def load_vl107_lang(lang = None, per_lang = None, vl107_dir = "/exp/jvillalba/co
 
     lang_dataset = Dataset.from_dict({"signal": [f"{vl107_dir}/{audio}" for audio in files], "lang": [lang]*len(files), "accent": ["-"]*len(files)}).cast_column("signal", Audio(sampling_rate=16_000))
     
-    lang_dataset = lang_dataset.map(map_create_audio_chunks, batched=True, batch_size = 100, \
-                                    num_proc = 2, keep_in_memory=False, writer_batch_size=100)
-    # lang_dataset = lang_dataset.map(map_create_audio_chunks, batched=True, batch_size = 100)
+    # lang_dataset = lang_dataset.map(map_create_audio_chunks, batched=True, batch_size = 100, \
+    #                                 num_proc = 4, keep_in_memory=False, writer_batch_size=10)
+    lang_dataset = lang_dataset.map(map_create_audio_chunks, batched=True, batch_size = 100)
     
 
     # lang_dataset = Dataset.from_dict({"signal": [f["signal"]["array"] for f in lang_dataset], \
