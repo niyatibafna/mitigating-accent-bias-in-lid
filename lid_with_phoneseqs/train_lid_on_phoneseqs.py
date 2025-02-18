@@ -32,8 +32,12 @@ import logging
 
 from argparse import ArgumentParser
 
+from datasets import concatenate_datasets
+
 sys.path.append("/home/hltcoe/nbafna/projects/mitigating-accent-bias-in-lid/utils/phoneseq_dataloading")
+sys.path.append("/home/hltcoe/nbafna/projects/mitigating-accent-bias-in-lid/lid_with_acoustics-phoneseq/")
 from phoneseq_dataset_loader import load_phoneseq_dataset
+from encode_and_transcribe_dataset import main as load_or_compute_encode_and_transcribe_dataset
 
 random.seed(42)
 
@@ -134,8 +138,8 @@ class PostEncoder:
             for batch in train_loader:
                 # logger.info(f"Steps: {steps}")
                 optimizer.zero_grad()
-                input_values = batch["input_values"].cuda()
-                labels = batch["labels"].cuda()
+                input_values = batch["input_values"]
+                labels = batch["labels"]
                 assert self.model is not None and next(self.model.parameters()).is_cuda, "Model is not on GPU!"
                 assert input_values.is_cuda, "Input is not on GPU!"
                 assert labels.is_cuda, "Labels are not on GPU!"
@@ -149,7 +153,7 @@ class PostEncoder:
                 if evaluate_steps and steps % evaluate_steps == 0:
 
                     # Evaluate
-                    _, _, _, accuracy = self.evaluate(dev_dataset)
+                    *_, accuracy = self.evaluate(dev_dataset)
                     wandb.log({"loss": loss.item()})
                     wandb.log({"accuracy": accuracy, "epoch": epoch})
                     logger.info(f"Epoch: {epoch}, Steps: {steps}, Accuracy: {accuracy}")
@@ -159,7 +163,7 @@ class PostEncoder:
                 # Log per epoch if evaluate_steps is not provided
                 wandb.log({"loss": loss.item()})
                 # Evaluate
-                _, _, _, accuracy = self.evaluate(dev_dataset)
+                *_, accuracy = self.evaluate(dev_dataset)
                 wandb.log({"accuracy": accuracy, "epoch": epoch})
                 logger.info(f"Epoch: {epoch}, Accuracy: {accuracy}")
 
@@ -173,19 +177,21 @@ class PostEncoder:
         all_preds = []
         all_labels = []
         all_accents = []
+        all_audio_files = []
         for batch in test_loader:
-            input_values = batch["input_values"].cuda()
+            input_values = batch["input_values"]
             with torch.no_grad():
                 outputs = self.model(input_values)
                 preds = torch.argmax(outputs, dim=1)
                 all_preds.append(preds)
                 all_labels.append(batch["labels"])
                 all_accents.extend(batch["accents"])
-        return torch.cat(all_preds), torch.cat(all_labels), all_accents
+                all_audio_files.extend(batch["audio_files"])
+        return torch.cat(all_preds), torch.cat(all_labels), all_accents, all_audio_files
 
 
     def evaluate(self, test_dataset, collate_fn):
-        preds, labels, accents = self.predict(test_dataset)
+        preds, labels, accents, audio_files = self.predict(test_dataset)
 
         preds = preds.cpu()
         labels = labels.cpu()
@@ -197,7 +203,7 @@ class PostEncoder:
         correct = (preds == labels).sum().item()
         total = len(labels)
         logger.info(f"Accuracy: {correct/total}")
-        return preds, labels, accents, correct/total
+        return preds, labels, accents, audio_files, correct/total
     
     def save(self, model_filename):
         torch.save(self.model, os.path.join(self.output_dir, model_filename))
@@ -324,13 +330,18 @@ def collate_fn(batch):
     padding_idx = 0
     sequences = [torch.tensor(item["sequence"]) for item in batch]
     truncated_sequences = [seq[:model_max_len] for seq in sequences]
+
     labels = [item["label"] for item in batch]
     accents = [item["accent"] for item in batch]
+    audio_files = [item["audio_file"] for item in batch]  
 
     # Pad the sequences with padding_idx=0
     padded_sequences = torch.nn.utils.rnn.pad_sequence(truncated_sequences, batch_first=True, padding_value=padding_idx)
-    labels = torch.tensor(labels)
-    return {"input_values": padded_sequences, "labels": labels, "accents": accents}
+    # Cast to int64
+    padded_sequences = padded_sequences.long().cuda()
+
+    labels = torch.tensor(labels).cuda()
+    return {"input_values": padded_sequences, "labels": labels, "accents": accents, "audio_files": audio_files}
 
 
 
@@ -360,6 +371,26 @@ def get_dataset_splits(lid_dataset, dev_size = 0.05, test_size = 0.1):
 
     return train_dataset, dev_dataset, test_dataset
 
+
+def load_reps_and_phoneseq_dataset(transcriber_model=None, encoder_model=None, dataset_name=None, \
+                                   langs=None, per_lang = None, batch_size = 1, output_dir = None, \
+                                    log_file = None):
+
+    encoder_model = "ecapa-tdnn"
+    transcriber_model = "facebook/wav2vec2-xlsr-53-espeak-cv-ft"
+    output_dir = f"/exp/nbafna/projects/mitigating-accent-bias-in-lid/reps_and_phoneseqs/{dataset_name}/ecapa-tdnn_wav2vec2-xlsr-53-espeak-cv-ft"
+    all_lang_datasets = []
+    for lang in langs:
+        print(f"Processing lang: {lang}")
+        logger.info(f"Processing lang: {lang}")
+        lang_dataset = load_or_compute_encode_and_transcribe_dataset(transcriber_model, encoder_model, dataset_name, per_lang=per_lang, lang=lang, \
+            batch_size=batch_size, output_dir=output_dir, log_file=None)
+        if lang_dataset is not None:
+            all_lang_datasets.append(lang_dataset)
+
+    lid_dataset = concatenate_datasets(all_lang_datasets)
+
+    return lid_dataset
 
 
 def main():
@@ -432,7 +463,7 @@ def main():
 
         # Evaluate the model
         logger.info(f"Evaluating model on test split of train dataset...")
-        preds, labels, accents, accuracy = lid_model.evaluate(test_dataset)
+        preds, labels, accents, audio_files, accuracy = lid_model.evaluate(test_dataset)
         logger.info(f"Accuracy: {accuracy}")
 
         # Save the predictions
@@ -446,7 +477,7 @@ def main():
 
         with open(os.path.join(output_dir, "testset_predictions.pkl"), "wb") as f:
             # pkl.dump({"audio_files": audio_files_test, "preds": preds, "labels": labels}, f)
-            pkl.dump({"preds": preds, "labels": labels, "accents": accents}, f)
+            pkl.dump({"preds": preds, "labels": labels, "accents": accents, "audio_files": audio_files}, f)
 
         with open(os.path.join(output_dir, f"eval_accuracy.json"), "w") as f:
             json.dump({f"{dataset_dir}_test_accuracy": accuracy}, f)
@@ -455,14 +486,23 @@ def main():
 
     if eval_dataset_dir:
         logger.info(f"Evaluating model on eval dataset...")
-        eval_dataset = load_phoneseq_dataset(eval_dataset_dir, target_code_type = dataset_dir)
+        # eval_dataset = load_phoneseq_dataset(eval_dataset_dir, target_code_type = dataset_dir)
+        ## We're loading from our combined phoneseqs+reps dataset
+        print(f"Langs: {langs}")
+
+        eval_dataset = load_reps_and_phoneseq_dataset(dataset_name=eval_dataset_dir, langs=langs, \
+                        per_lang=per_lang, batch_size=batch_size)
+        print(f"Number of samples in eval dataset: {len(eval_dataset)}")
+        # Let's remove reps from the dataset
+        eval_dataset = eval_dataset.remove_columns(["reps"])
+        eval_dataset = eval_dataset.map(lambda x: {"phone_sequence": x["phone_sequence"].strip().split(" "), "lang": x["lang"], "accent": x["accent"], "audio_file": x["audio_file"]})
 
         eval_dataset = eval_dataset.map(map_tokenize_phoneme_labels, fn_kwargs={"phoneme2idx": phoneme2idx, "lang2idx": lang2idx}, \
             batched=True, \
             batch_size = 1000)
 
         logger.info(f"Evaluating model on eval dataset...")
-        preds, labels, accents, accuracy = lid_model.evaluate(eval_dataset)
+        preds, labels, accents, audio_files, accuracy = lid_model.evaluate(eval_dataset)
         logger.info(f"Accuracy: {accuracy}")
 
 
@@ -477,7 +517,7 @@ def main():
 
         with open(os.path.join(output_dir, f"{eval_dataset_dir}_predictions.pkl"), "wb") as f:
             # pkl.dump({"audio_files": audio_files_test, "preds": preds, "labels": labels}, f)
-            pkl.dump({"preds": preds, "labels": labels, "accents": accents}, f)
+            pkl.dump({"preds": preds, "labels": labels, "accents": accents, "audio_files": audio_files}, f)
         
         # Save accuracy to JSON file
 

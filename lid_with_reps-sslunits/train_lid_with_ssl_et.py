@@ -159,7 +159,7 @@ class PostEncoder:
                 if evaluate_steps and steps % evaluate_steps == 0:
 
                     # Evaluate
-                    _, _, _, accuracy = self.evaluate(dev_dataset)
+                    *_, accuracy = self.evaluate(dev_dataset)
                     wandb.log({"loss": loss.item()})
                     wandb.log({"accuracy": accuracy, "epoch": epoch})
                     logger.info(f"Epoch: {epoch}, Steps: {steps}, Accuracy: {accuracy}")
@@ -169,7 +169,7 @@ class PostEncoder:
                 # Log per epoch if evaluate_steps is not provided
                 wandb.log({"loss": loss.item()})
                 # Evaluate
-                _, _, _, accuracy = self.evaluate(dev_dataset)
+                *_, accuracy = self.evaluate(dev_dataset)
                 wandb.log({"accuracy": accuracy, "epoch": epoch})
                 logger.info(f"Epoch: {epoch}, Accuracy: {accuracy}")
 
@@ -184,6 +184,7 @@ class PostEncoder:
         all_preds = []
         all_labels = []
         all_accents = []
+        all_audio_files = []
         for batch in test_loader:
             input_values = batch["input_values"]
             with torch.no_grad():
@@ -192,11 +193,12 @@ class PostEncoder:
                 all_preds.append(preds)
                 all_labels.append(batch["labels"])
                 all_accents.extend(batch["accents"])
-        return torch.cat(all_preds), torch.cat(all_labels), all_accents
+                all_audio_files.extend(batch["audio_files"])
+        return torch.cat(all_preds), torch.cat(all_labels), all_accents, all_audio_files
 
 
     def evaluate(self, test_dataset, collate_fn):
-        preds, labels, accents = self.predict(test_dataset)
+        preds, labels, accents, audio_files = self.predict(test_dataset)
 
         preds = preds.cpu()
         labels = labels.cpu()
@@ -208,7 +210,8 @@ class PostEncoder:
         correct = (preds == labels).sum().item()
         total = len(labels)
         logger.info(f"Accuracy: {correct/total}")
-        return preds, labels, accents, correct/total
+        return preds, labels, accents, audio_files, correct/total
+    
     
     def save(self, model_filename):
         torch.save(self.model, os.path.join(self.output_dir, model_filename))
@@ -392,14 +395,16 @@ def collate_fn(batch):
     labels = torch.tensor(labels).cuda()
 
     # Prepare the accents
-    accents = [item["accent"] for item in batch]    
+    accents = [item["accent"] for item in batch]   
+    audio_files = [item["audio_file"] for item in batch]   
 
     # Input is a tuple of (ssl_units, reps)
     # Note that ssl_units are already embedded, of shape (batch_size, num_units, dim)
     # reps are of shape (batch_size, reps_dim)
     return {"input_values": input_values,
             "labels": labels, \
-            "accents": accents}
+            "accents": accents, \
+            "audio_files": audio_files}
 
 
 
@@ -498,7 +503,7 @@ def main():
 
         # Evaluate the model
         logger.info(f"Evaluating model on test split of train dataset...")
-        preds, labels, accents, accuracy = lid_model.evaluate(test_dataset)
+        preds, labels, accents, audio_files, accuracy = lid_model.evaluate(test_dataset)
         logger.info(f"Accuracy: {accuracy}")
 
         # Save the predictions
@@ -512,7 +517,7 @@ def main():
 
         with open(os.path.join(output_dir, "testset_predictions.pkl"), "wb") as f:
             # pkl.dump({"audio_files": audio_files_test, "preds": preds, "labels": labels}, f)
-            pkl.dump({"preds": preds, "labels": labels, "accents": accents}, f)
+            pkl.dump({"preds": preds, "labels": labels, "accents": accents, "audio_files": audio_files}, f)
 
         with open(os.path.join(output_dir, f"eval_accuracy.json"), "w") as f:
             json.dump({f"{dataset_name}_test_accuracy": accuracy}, f)
@@ -536,7 +541,7 @@ def main():
         eval_dataset.set_transform(map_get_codevectors_reps)
         
         logger.info(f"Evaluating model on eval dataset...")
-        preds, labels, accents, accuracy = lid_model.evaluate(eval_dataset)
+        preds, labels, accents, audio_files, accuracy = lid_model.evaluate(eval_dataset)
         logger.info(f"Accuracy: {accuracy}")
 
 
@@ -551,7 +556,7 @@ def main():
 
         with open(os.path.join(output_dir, f"{eval_dataset_name}_predictions.pkl"), "wb") as f:
             # pkl.dump({"audio_files": audio_files_test, "preds": preds, "labels": labels}, f)
-            pkl.dump({"preds": preds, "labels": labels, "accents": accents}, f)
+            pkl.dump({"preds": preds, "labels": labels, "accents": accents, "audio_files": audio_files}, f)
         
         # Save accuracy to JSON file
 

@@ -335,13 +335,18 @@ def collate_fn(batch):
     padding_idx = 0
     sequences = [torch.tensor(item["sequence"]) for item in batch]
     truncated_sequences = [seq[:model_max_len] for seq in sequences]
+
     labels = [item["label"] for item in batch]
     accents = [item["accent"] for item in batch]
+    audio_files = [item["audio_file"] for item in batch]  
 
     # Pad the sequences with padding_idx=0
     padded_sequences = torch.nn.utils.rnn.pad_sequence(truncated_sequences, batch_first=True, padding_value=padding_idx)
-    labels = torch.tensor(labels)
-    return {"input_values": padded_sequences, "labels": labels, "accents": accents}
+    # Cast to int64
+    padded_sequences = padded_sequences.long().cuda()
+
+    labels = torch.tensor(labels).cuda()
+    return {"input_values": padded_sequences, "labels": labels, "accents": accents, "audio_files": audio_files}
 
 def collate_fn_with_et_dists(batch):
     '''Pad the phoneme sequences to the maximum length'''
@@ -351,13 +356,17 @@ def collate_fn_with_et_dists(batch):
     truncated_sequences = [seq[:model_max_len] for seq in sequences]
     labels = [item["label"] for item in batch]
     accents = [item["accent"] for item in batch]
+    audio_files = [item["audio_file"] for item in batch]
     et_output_distributions = [item["et_output_distributions"] for item in batch]
 
     # Pad the sequences with padding_idx=0, padded_sequences should be int tensor
     padded_sequences = torch.nn.utils.rnn.pad_sequence(truncated_sequences, batch_first=True, padding_value=padding_idx)
-    padded_sequences = padded_sequences.type(torch.int64)
-    labels = torch.tensor(labels)
-    return {"input_values": padded_sequences, "labels": labels, "accents": accents, "et_output_distributions": et_output_distributions}
+    padded_sequences = padded_sequences.type(torch.int64).cuda()
+    labels = torch.tensor(labels).cuda()
+    et_output_distributions = torch.tensor(et_output_distributions)
+    return {"input_values": padded_sequences, "labels": labels, "accents": accents, \
+        "audio_files": audio_files, \
+        "et_output_distributions": et_output_distributions}
 
 
 
@@ -397,6 +406,7 @@ def combine_and_predict(lid_model, test_dataset, collate_fn):
     all_labels = []
     all_preds = []
     all_accents = []
+    all_audio_files = []
     for batch in test_loader:
         if torch.cuda.is_available():
             input_values = batch["input_values"].cuda()
@@ -420,14 +430,15 @@ def combine_and_predict(lid_model, test_dataset, collate_fn):
 
             all_labels.append(batch["labels"])
             all_accents.extend(batch["accents"])
+            all_audio_files.extend(batch["audio_files"])
 
 
-    return torch.cat(all_preds), torch.cat(all_labels), all_accents
+    return torch.cat(all_preds), torch.cat(all_labels), all_accents, all_audio_files
     
     
 
 def combine_and_evaluate(lid_model, test_dataset, collate_fn):
-        preds, labels, accents = combine_and_predict(lid_model, test_dataset, collate_fn)
+        preds, labels, accents, audio_files = combine_and_predict(lid_model, test_dataset, collate_fn)
 
         preds = preds.cpu()
         labels = labels.cpu()
@@ -439,7 +450,7 @@ def combine_and_evaluate(lid_model, test_dataset, collate_fn):
         correct = (preds == labels).sum().item()
         total = len(labels)
         logger.info(f"Accuracy: {correct/total}")
-        return preds, labels, accents, correct/total
+        return preds, labels, accents, audio_files, correct/total
 
 
 def load_dists_and_phoneseq_dataset(transcriber_model, encoder_model, dataset_name, \
@@ -530,7 +541,7 @@ def main():
             batch_size = 1000)
 
         logger.info(f"Evaluating model on eval dataset...")
-        preds, labels, accents, accuracy = combine_and_evaluate(lid_model, eval_dataset, collate_fn_with_et_dists)
+        preds, labels, accents, audio_files, accuracy = combine_and_evaluate(lid_model, eval_dataset, collate_fn_with_et_dists)
 
 
         # Save the predictions
@@ -544,7 +555,7 @@ def main():
 
         with open(os.path.join(output_dir, f"{eval_dataset_name}_predictions.pkl"), "wb") as f:
             # pkl.dump({"audio_files": audio_files_test, "preds": preds, "labels": labels}, f)
-            pkl.dump({"preds": preds, "labels": labels, "accents": accents}, f)
+            pkl.dump({"preds": preds, "labels": labels, "accents": accents, "audio_files": audio_files}, f)
         
         # Save accuracy to JSON file
 

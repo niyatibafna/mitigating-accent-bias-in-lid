@@ -176,8 +176,8 @@ class PostEncoder:
             for batch in train_loader:
                 logger.info(f"Steps: {steps}")
                 optimizer.zero_grad()
-                input_values = batch["input_values"].cuda()
-                labels = batch["labels"].cuda()
+                input_values = batch["input_values"]
+                labels = batch["labels"]
                 assert self.model is not None and next(self.model.parameters()).is_cuda, "Model is not on GPU!"
                 assert input_values.is_cuda, "Input is not on GPU!"
                 assert labels.is_cuda, "Labels are not on GPU!"
@@ -191,7 +191,7 @@ class PostEncoder:
                 if evaluate_steps and steps % evaluate_steps == 0:
 
                     # Evaluate
-                    _, _, _, accuracy = self.evaluate(dev_dataset)
+                    *_, accuracy = self.evaluate(dev_dataset)
                     wandb.log({"loss": loss.item()})
                     wandb.log({"accuracy": accuracy, "epoch": epoch})
                     logger.info(f"Epoch: {epoch}, Steps: {steps}, Accuracy: {accuracy}")
@@ -201,7 +201,7 @@ class PostEncoder:
                 # Log per epoch if evaluate_steps is not provided
                 wandb.log({"loss": loss.item()})
                 # Evaluate
-                _, _, _, accuracy = self.evaluate(dev_dataset)
+                *_, accuracy = self.evaluate(dev_dataset)
                 wandb.log({"accuracy": accuracy, "epoch": epoch})
                 logger.info(f"Epoch: {epoch}, Accuracy: {accuracy}")
 
@@ -215,19 +215,21 @@ class PostEncoder:
         all_preds = []
         all_labels = []
         all_accents = []
+        all_audio_files = []
         for batch in test_loader:
-            input_values = batch["input_values"].cuda()
+            input_values = batch["input_values"]
             with torch.no_grad():
                 outputs = self.model(input_values)
                 preds = torch.argmax(outputs, dim=1)
                 all_preds.append(preds)
                 all_labels.append(batch["labels"])
                 all_accents.extend(batch["accents"])
-        return torch.cat(all_preds), torch.cat(all_labels), all_accents
+                all_audio_files.extend(batch["audio_files"])
+        return torch.cat(all_preds), torch.cat(all_labels), all_accents, all_audio_files
 
 
     def evaluate(self, test_dataset, collate_fn):
-        preds, labels, accents = self.predict(test_dataset)
+        preds, labels, accents, audio_files = self.predict(test_dataset)
 
         preds = preds.cpu()
         labels = labels.cpu()
@@ -239,7 +241,7 @@ class PostEncoder:
         correct = (preds == labels).sum().item()
         total = len(labels)
         logger.info(f"Accuracy: {correct/total}")
-        return preds, labels, accents, correct/total
+        return preds, labels, accents, audio_files, correct/total
     
     def save(self, model_filename):
         torch.save(self.model, os.path.join(self.output_dir, model_filename))
@@ -643,7 +645,7 @@ def construct_lid_dataset_codevectors(dataset_dir, lang2idx, per_lang, model_nam
     logger.info(f"Total number of samples: {len(lid_dataset)}")
     logger.info(f"Example sequence: Accent: {lid_dataset[0]['accent']}, Language: {idx2lang[lid_dataset[0]['lang']]}, Length: {len(lid_dataset[0]['sequence'])}")
 
-    lid_dataset.set_transform(map_get_codevectors_reps, columns=["sequence", "lang", "accent"])
+    lid_dataset.set_transform(map_get_codevectors_reps, columns=["sequence", "lang", "accent", "audio_file"])
 
     return lid_dataset
 
@@ -656,7 +658,10 @@ def collate_fn(batch):
     input_values = [torch.tensor(item["sequence"]) for item in batch]
     labels = [item["lang"] for item in batch]    
     accents = [item["accent"] for item in batch]
-    return {"input_values": torch.stack(input_values), "labels": torch.tensor(labels), "accents": accents}
+    audio_files = [item["audio_file"] for item in batch]
+    return {"input_values": torch.stack(input_values).cuda(), \
+        "labels": torch.tensor(labels).cuda(), "accents": accents,\
+            "audio_files": audio_files}
 
 def main():
     global logger
@@ -759,7 +764,7 @@ def main():
 
         # Evaluate the model
         logger.info(f"Evaluating model on test split of train dataset...")
-        preds, labels, accents, accuracy = lid_model.evaluate(test_dataset)
+        preds, labels, accents, audio_files, accuracy = lid_model.evaluate(test_dataset)
         logger.info(f"Accuracy: {accuracy}")
 
         # Save the predictions
@@ -773,7 +778,7 @@ def main():
 
         with open(os.path.join(output_dir, "testset_predictions.pkl"), "wb") as f:
             # pkl.dump({"audio_files": audio_files_test, "preds": preds, "labels": labels}, f)
-            pkl.dump({"preds": preds, "labels": labels, "accents": accents}, f)
+            pkl.dump({"preds": preds, "labels": labels, "accents": accents, "audio_files": audio_files}, f)
 
 
         with open(os.path.join(output_dir, f"eval_accuracy.json"), "w") as f:
@@ -790,7 +795,7 @@ def main():
         sequence_size = len(eval_dataset[0]["sequence"])
 
         logger.info(f"Evaluating model on eval dataset...")
-        preds, labels, accents, accuracy = lid_model.evaluate(eval_dataset)
+        preds, labels, accents, audio_files, accuracy = lid_model.evaluate(eval_dataset)
         logger.info(f"Accuracy: {accuracy}")
 
 
@@ -805,7 +810,7 @@ def main():
 
         with open(os.path.join(output_dir, f"{eval_dataset_dir}_predictions.pkl"), "wb") as f:
             # pkl.dump({"audio_files": audio_files_test, "preds": preds, "labels": labels}, f)
-            pkl.dump({"preds": preds, "labels": labels, "accents": accents}, f)
+            pkl.dump({"preds": preds, "labels": labels, "accents": accents, "audio_files": audio_files}, f)
 
         # Save accuracy to JSON file
         if os.path.exists(os.path.join(output_dir, f"eval_accuracy.json")):

@@ -12,13 +12,20 @@ import pickle as pkl
 sys.path.append("/home/hltcoe/nbafna/projects/mitigating-accent-bias-in-lid/utils/dataloading/")
 from dataset_loader import load_lid_dataset
 
-dataset_name = "edacc"
-lang = sys.argv[1]
-output_dir = f"/home/hltcoe/nbafna/projects/mitigating-accent-bias-in-lid/prelim_evals/preds/{dataset_name}_predictions/"
+# dataset_name = "edacc"
+# dataset_name = "cv_from_hf"
+dataset_name = sys.argv[1]
+lang = sys.argv[2]
+print(f"Dataset: {dataset_name}, Lang: {lang}")
+per_lang = None
+
+output_dir = f"/home/hltcoe/nbafna/projects/mitigating-accent-bias-in-lid/prelim_evals/pred_new/{dataset_name}_predictions/"
 os.makedirs(output_dir, exist_ok = True)
 
+
 # Load the dataset
-dataset = load_lid_dataset(dataset_name, lang = lang, target_code_type = "vl107")
+
+dataset = load_lid_dataset(dataset_name, lang = lang, per_lang = per_lang, target_code_type = "vl107")
 
 if not dataset:
     print("Dataset not found")
@@ -43,6 +50,7 @@ batch_size = 16
 all_preds = []
 all_labels = []
 all_accents = []
+all_audio_files = []
 for data in dataset.iter(batch_size = batch_size):
     # print("here")
     signals = torch.stack([torch.tensor(signal) for signal in data["signal"]])
@@ -53,16 +61,19 @@ for data in dataset.iter(batch_size = batch_size):
     all_preds.extend(predictions[3])
     all_labels.extend(data["lang"])
     all_accents.extend(data["accent"])
+    all_audio_files.extend(data["audio_file"])
 
 
-assert len(all_preds) == len(all_labels) == len(all_accents), "Lengths of predictions, labels, and accents do not match"
+assert len(all_preds) == len(all_labels) == len(all_accents) == len(all_audio_files), "Lengths of predictions, labels, and accents do not match"
 print(f"Length of all_preds: {len(all_preds)}")
 
 preds = [pred.split(":")[0] for pred in all_preds] # ET returns labels like "en: English", we only want the language code
 
+print(f"Saving predictions to {os.path.join(output_dir, f"{lang}_predictions.pkl")}")
+
 with open(os.path.join(output_dir, f"{lang}_predictions.pkl"), "wb") as f:
     # pkl.dump({"audio_files": audio_files_test, "preds": preds, "labels": labels}, f)
-    pkl.dump({"preds": preds, "labels": all_labels, "accents": all_accents}, f)
+    pkl.dump({"preds": preds, "labels": all_labels, "accents": all_accents, "audio_files": all_audio_files}, f)
 
 
 correct = 0
