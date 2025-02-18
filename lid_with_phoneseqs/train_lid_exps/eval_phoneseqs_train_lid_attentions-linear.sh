@@ -3,7 +3,7 @@
 #$ -N att_ps_train_lid
 #$ -wd /home/hltcoe/nbafna/projects/mitigating-accent-bias-in-lid/
 #$ -m e
-#$ -t 2
+#$ -t 1-5
 #$ -j y -o qsub_logs/eval_ps_train_attentions_$TASK_ID.out
 
 # Fill out RAM/memory (same thing) request,
@@ -67,7 +67,9 @@ logfile="$logdir/train_lid_attentions-$num_attention_layers-linear.log"
 # eval_dataset_dir="edacc"
 # eval_dataset_dir="cv"
 # eval_dataset_dir="fleurs_test"
-eval_dataset_dir="nistlre"
+# eval_dataset_dir="nistlre"
+eval_dataset_dirs=("edacc" "cv" "fleurs_test" "nistlre" "cv_from_hf")
+eval_dataset_dir=${eval_dataset_dirs[$SGE_TASK_ID-1]}
 
 
 /home/hltcoe/nbafna/.conda/envs/accent_bias/bin/python lid_with_phoneseqs/train_lid_on_phoneseqs.py \

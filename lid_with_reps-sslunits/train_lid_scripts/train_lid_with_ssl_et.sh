@@ -3,7 +3,7 @@
 #$ -N reps-ps_train_lid
 #$ -wd /home/hltcoe/nbafna/projects/mitigating-accent-bias-in-lid/
 #$ -m e
-#$ -t 2
+#$ -t 1-2
 #$ -j y -o qsub_logs/reps-ps_train_attentions_$TASK_ID.out
 
 # Fill out RAM/memory (same thing) request,
@@ -57,7 +57,7 @@ mkdir -p $save_dataset_dir
 
 # dataset_dir=None
 # per_lang=100
-num_epochs=25
+num_epochs=10
 batch_size=(128)
 evaluate_steps=100
 # batch_sizes=(4)

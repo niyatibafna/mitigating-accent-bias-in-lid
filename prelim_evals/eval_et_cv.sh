@@ -1,10 +1,9 @@
 #!/usr/bin/env bash
 
-#$ -N eval_et_fl
+#$ -N eval_et_cv
 #$ -wd /home/hltcoe/nbafna/projects/mitigating-accent-bias-in-lid/prelim_evals
 #$ -m e
-#$ -t 1-107
-#$ -j y -o /home/hltcoe/nbafna/projects/mitigating-accent-bias-in-lid/prelim_evals/qsub_logs/eval_et_fl/$TASK_ID.out
+#$ -j y -o /home/hltcoe/nbafna/projects/mitigating-accent-bias-in-lid/prelim_evals/qsub_logs/eval_et_cv.out
 
 # Fill out RAM/memory (same thing) request,
 # the number of GPUs you want,
@@ -38,18 +37,8 @@ export TORCH_DISTRIBUTED_DEBUG=DETAIL
 WD="/home/hltcoe/nbafna/projects/mitigating-accent-bias-in-lid/prelim_evals"
 cd $WD
 
-dataset_name="fleurs_test"
-all_langs=$(ls /exp/jvillalba/corpora/voxlingua107)
-all_langs=($all_langs)
-# langs_already_computed=$(ls /exp/nbafna/projects/mitigating-accent-bias-in-lid/wav2vec2_intermediate_outputs/vl107/$model_key)
-# Only extract units for languages that haven't been computed yet
-# langs=$(echo $all_langs | tr " " "\n" | grep -v -w -f <(echo $langs_already_computed | tr " " "\n"))
-# langs=($langs)
-# echo "Number of languages to extract units from:"
-# echo ${#langs[@]}
-# langs=(haw hi hr ht hu hy ia id it ja ka ko la lb lo lv mi ml mr mt ne no oc ps pt ru sco si sl so sr sv ta tg tk tr uk uz war yo)
-lang=${all_langs[$SGE_TASK_ID-1]}
-echo "Extracting units for $lang"
+dataset_name="cv"
+lang="en"
 
 
 export CUDA_LAUNCH_BLOCKING=1

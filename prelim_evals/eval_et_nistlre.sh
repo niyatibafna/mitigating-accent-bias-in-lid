@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 
-#$ -N eval_et
+#$ -N eval_et_nistlre
 #$ -wd /home/hltcoe/nbafna/projects/mitigating-accent-bias-in-lid/prelim_evals
 #$ -m e
+#$ -t 1-5
 #$ -j y -o /home/hltcoe/nbafna/projects/mitigating-accent-bias-in-lid/prelim_evals/qsub_logs/eval_et_$TASK_ID.out
 
 # Fill out RAM/memory (same thing) request,
@@ -37,12 +38,14 @@ export TORCH_DISTRIBUTED_DEBUG=DETAIL
 WD="/home/hltcoe/nbafna/projects/mitigating-accent-bias-in-lid/prelim_evals"
 cd $WD
 
-dataset_name="edacc"
-lang="en"
+dataset_name="nistlre"
 
+all_langs=("ar" "en" "es" "zh" "pt")
+lang=${all_langs[$SGE_TASK_ID-1]}
+per_lang=1000
 
 export CUDA_LAUNCH_BLOCKING=1
 export NCCL_DEBUG=INFO
 # export CUDA_VISIBLE_DEVICES=0,1
-python /home/hltcoe/nbafna/projects/mitigating-accent-bias-in-lid/prelim_evals/eval_et.py $dataset_name $lang
+python /home/hltcoe/nbafna/projects/mitigating-accent-bias-in-lid/prelim_evals/eval_et.py $dataset_name $lang $per_lang
 

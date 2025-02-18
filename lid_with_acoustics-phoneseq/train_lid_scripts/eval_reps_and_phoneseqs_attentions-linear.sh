@@ -3,7 +3,7 @@
 #$ -N eval_reps-ps_train_lid
 #$ -wd /home/hltcoe/nbafna/projects/mitigating-accent-bias-in-lid/
 #$ -m e
-#$ -t 1-2
+#$ -t 1
 #$ -j y -o qsub_logs/eval_reps-ps_train_attentions_$TASK_ID.out
 
 # Fill out RAM/memory (same thing) request,
@@ -58,7 +58,8 @@ evaluate_steps=100
 # batch_sizes=(4)
 lr=0.0001
 num_attention_layers_all=(4 8)
-num_attention_layers=${num_attention_layers_all[$SGE_TASK_ID-1]}
+# num_attention_layers=${num_attention_layers_all[$SGE_TASK_ID-1]}
+num_attention_layers=8
 
 lid_model_type="attentions-linear"
 
@@ -74,7 +75,9 @@ logfile="$logdir/train_lid_attentions-$num_attention_layers-linear.log"
 # eval_dataset_dir="cv"
 # eval_dataset_dir="fleurs_test"
 # eval_dataset_dir="nistlre"
-eval_dataset_dir="cv_from_hf"
+# eval_dataset_dir="cv_from_hf"
+eval_dataset_dirs=("cv_from_hf" "cv" "edacc" "fleurs_test" "nistlre")
+eval_dataset_dir=${eval_dataset_dirs[$SGE_TASK_ID-1]}
 
 save_eval_dataset_dir="/exp/nbafna/projects/mitigating-accent-bias-in-lid/reps_and_phoneseqs/$eval_dataset_dir/$model_key/"
 mkdir -p $save_eval_dataset_dir

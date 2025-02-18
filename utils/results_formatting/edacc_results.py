@@ -15,7 +15,9 @@ import pandas as pd
 # predictions_path = "/exp/nbafna/projects/mitigating-accent-bias-in-lid/wav2vec2_intermediate_outputs/vl107/wav2vec2-base-layer8-10000/cnn-attentions-linear-4/lid_model_outputs/predictions.pkl"
 # predictions_path = "/exp/nbafna/projects/mitigating-accent-bias-in-lid/wav2vec2_intermediate_outputs/vl107/wav2vec2-base-layer8-500/cnn-attentions-linear-4/lid_model_outputs/predictions.pkl"
 # predictions_path = "/exp/nbafna/projects/mitigating-accent-bias-in-lid/wav2vec2_intermediate_outputs/vl107/wav2vec2-base-layer8-10000/cnn-attentions-linear-8/lid_model_outputs/predictions.pkl"
-predictions_path = "/exp/nbafna/projects/mitigating-accent-bias-in-lid/reps-phoneseq_exps/vl107/ecapa-tdnn_wav2vec2-xlsr-53-espeak-cv-ft/attentions-linear-8/reps-phoneseq_lid_model_outputs/edacc_predictions.pkl"
+# predictions_path = "/exp/nbafna/projects/mitigating-accent-bias-in-lid/reps-phoneseq_exps/vl107/ecapa-tdnn_wav2vec2-xlsr-53-espeak-cv-ft/attentions-linear-8/reps-phoneseq_lid_model_outputs/edacc_predictions.pkl"
+predictions_path = "/home/hltcoe/nbafna/projects/mitigating-accent-bias-in-lid/prelim_evals/preds/formatted/edacc_predictions.pkl"
+
 # output_path = "wav2vec2-base-layer8-100/accuracy.csv"
 
 output_path = None

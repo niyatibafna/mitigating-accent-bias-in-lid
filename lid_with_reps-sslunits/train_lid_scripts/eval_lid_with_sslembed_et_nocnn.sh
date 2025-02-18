@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 
-#$ -N reps-ps_train_lid
+#$ -N eval-sslembed_train_lid
 #$ -wd /home/hltcoe/nbafna/projects/mitigating-accent-bias-in-lid/
 #$ -m e
-#$ -t 1-4
-#$ -j y -o qsub_logs/eval_reps-ps_train_attentions_$TASK_ID.out
+#$ -t 1-3
+#$ -j y -o qsub_logs/eval-sslembed_train_attentions_$TASK_ID.out
 
 # Fill out RAM/memory (same thing) request,
 # the number of GPUs you want,
@@ -62,21 +62,21 @@ batch_size=(128)
 evaluate_steps=100
 # batch_sizes=(4)
 lr=0.0001
-# num_attention_layers_all=(4 8)
+num_attention_layers_all=(4 8)
 # num_attention_layers=${num_attention_layers_all[$SGE_TASK_ID-1]}
-num_attention_layers=4
+num_attention_layers=8
 
 lid_model_type="attentions-linear"
 
 
-output_dir="/exp/nbafna/projects/mitigating-accent-bias-in-lid/reps_phoneseqs_duseqs_exps/$dataset_dir/$model_key/$lid_model_type-$num_attention_layers/reps-phoneseq-duseqs_lid_model_outputs/"
+output_dir="/exp/nbafna/projects/mitigating-accent-bias-in-lid/reps_phoneseqs_duseqembed_exps/$dataset_dir/$model_key/$lid_model_type-$num_attention_layers/reps-phoneseq-duseqs_nocnn_lid_model_outputs/"
 mkdir -p $output_dir
 
 logdir="/home/hltcoe/nbafna/projects/mitigating-accent-bias-in-lid/lid_with_reps-phoneseqs/train_logs/$model_key/$lid_model_type"
 mkdir -p $logdir
 logfile="$logdir/train_lid_attentions-$num_attention_layers-linear.log"
 
-eval_dataset_dirs=("cv" "edacc" "fleurs_test" "cv_from_hf")
+eval_dataset_dirs=("cv" "fleurs_test" "edacc")
 eval_dataset_dir=${eval_dataset_dirs[$SGE_TASK_ID-1]}
 # eval_dataset_dir="edacc"
 # eval_dataset_dir="cv"
@@ -85,7 +85,7 @@ save_eval_dataset_dir="/exp/nbafna/projects/mitigating-accent-bias-in-lid/reps_p
 mkdir -p $save_eval_dataset_dir
 
 
-/home/hltcoe/nbafna/.conda/envs/accent_bias/bin/python /home/hltcoe/nbafna/projects/mitigating-accent-bias-in-lid/lid_with_reps-sslunits/train_lid_with_ssl_et.py \
+/home/hltcoe/nbafna/.conda/envs/accent_bias/bin/python /home/hltcoe/nbafna/projects/mitigating-accent-bias-in-lid/lid_with_reps-sslunits/train_lid_with_sslembed_et.py \
     --dataset_name $dataset_dir \
     --save_dataset_dir $save_dataset_dir \
     --transcriber_model $transcriber_model \
@@ -107,23 +107,3 @@ mkdir -p $save_eval_dataset_dir
 
 echo "Training LID complete"
 
-# parser.add_argument("--dataset_name", type=str, required=True, help="Directory containing transcribed audio files")
-    
-#     parser.add_argument("--transcriber_model", type=str, required=True, help="Model used to transcribe the audio files")
-#     parser.add_argument("--encoder_model", type=str, required=True, help="Model used to encode the audio files for acoustic representations")
-#     parser.add_argument("--save_dataset_dir", type=str, required=True, help="Directory to save the dataset")
-
-#     parser.add_argument("--per_lang", type=int, default=None, help="Number of audio files per language")
-#     parser.add_argument("--num_epochs", type=int, default=10, help="Number of epochs")
-#     parser.add_argument("--batch_size", type=int, default=1, help="Batch size")
-#     parser.add_argument("--evaluate_steps", type=int, default=None, help="Evaluate every n steps")
-#     parser.add_argument("--lr", type=float, default=1e-3, help="Learning rate")
-#     parser.add_argument("--output_dir", type=str, default="/exp/nbafna/projects/mitigating-accent-bias-in-lid/wav2vec2_intermediate_outputs", help="Output directory for LID model")
-#     parser.add_argument("--load_trained_from_dir", action="store_true", help="Load the model from output_dir")
-#     parser.add_argument("--lid_model_type", type=str, default="linear", help="Type of model to train")
-#     parser.add_argument("--logfile", type=str, default="train.log", help="Log file")
-#     parser.add_argument("--num_attention_layers", type=int, default=None, help="Number of attention layers")
-
-#     parser.add_argument("--only_eval", action="store_true", help="Only evaluate the model")
-#     parser.add_argument("--eval_dataset_name", type=str, default=None, help="Directory containing evaluation dataset")
-#     parser.add_argument("--save_eval_dataset_dir", type=str, default=None, help="Directory to save the evaluation dataset")

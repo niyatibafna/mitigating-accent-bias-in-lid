@@ -57,7 +57,7 @@ mkdir -p $save_dataset_dir
 
 # dataset_dir=None
 # per_lang=100
-num_epochs=25
+num_epochs=10
 batch_size=(128)
 evaluate_steps=100
 # batch_sizes=(4)
