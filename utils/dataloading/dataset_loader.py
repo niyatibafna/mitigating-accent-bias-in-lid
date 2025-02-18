@@ -4,6 +4,8 @@ from vl107 import load_vl107, load_vl107_lang
 from edacc import load_edacc
 from fleurs import load_fleurs
 from cv import load_cv
+from cv_from_hf import load_cv_from_hf
+from nistlre import load_nistlre
 sys.path.append("/home/hltcoe/nbafna/projects/mitigating-accent-bias-in-lid/utils/")
 from lang_code_maps import vl107_to_fleurs_map
 
@@ -37,6 +39,8 @@ def load_lid_dataset(dataset_name, per_lang = None, lang = None, split = "train"
         "edacc": load_edacc,
         "fleurs": load_fleurs,
         "cv": load_cv,
+        "cv_from_hf": load_cv_from_hf,
+        "nistlre": load_nistlre
     }
     # if dataset_name not in DATASET_REGISTRY:
     #     print(f"Dataset {dataset_name} not found in registry")
@@ -61,7 +65,13 @@ def load_lid_dataset(dataset_name, per_lang = None, lang = None, split = "train"
         ## Change this if we want to load multiple languages
         dataset = DATASET_REGISTRY[dataset_name](per_accent = per_lang, split = split) # These are English codes in VL107 and EDACC, both are used to load CV as an eval dataset
     
-    if target_code_type is not None and lang is None: # If lang is None, we deal with the labels in the loading logic.
+    elif dataset_name == "cv_from_hf":
+        dataset = DATASET_REGISTRY[dataset_name](lang = lang, per_lang = per_lang)
+
+    elif dataset_name == "nistlre":
+        dataset = DATASET_REGISTRY[dataset_name](lang = lang, per_accent = per_lang)
+
+    if target_code_type is not None and lang is None: # If lang is not None, we deal with the labels in the loading logic.
         dataset = convert_to_target_code(dataset_name, dataset, target_code_type)
 
     return dataset
