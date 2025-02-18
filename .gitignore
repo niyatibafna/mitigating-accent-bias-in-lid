@@ -27,3 +27,8 @@ lid_with_phoneseqs/train_logs/*
 prelim_evals/qsub_logs/*
 utils/results_formatting/*
 utils/misc/*.csv
+lid_with_reps-phoneseqs/train_logs/*
+prelim_evals/pred_new/*
+accent_confusions.pdf
+lid_with_dists-phoneseqs/train_logs/*
+utils/misc/speaker_id_mappings/*
