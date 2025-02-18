@@ -13,3 +13,14 @@ def vl107_to_fleurs_map():
     #             break
     vl107_to_fleurs_map = {'am': 'am_et', 'as': 'as_in', 'ar': 'ar_eg', 'be': 'be_by', 'az': 'az_az', 'bg': 'bg_bg', 'af': 'af_za', 'bn': 'bn_in', 'en': 'en_us', 'es': 'es_419', 'el': 'el_gr', 'et': 'et_ee', 'da': 'da_dk', 'cs': 'cs_cz', 'cy': 'cy_gb', 'de': 'de_de', 'ca': 'ca_es', 'ceb': 'ceb_ph', 'bs': 'bs_ba', 'gu': 'gu_in', 'fi': 'fi_fi', 'fr': 'fr_fr', 'gl': 'gl_es', 'fa': 'fa_ir', 'hu': 'hu_hu', 'hi': 'hi_in', 'hr': 'hr_hr', 'ha': 'ha_ng', 'hy': 'hy_am', 'km': 'km_kh', 'kk': 'kk_kz', 'ka': 'ka_ge', 'ja': 'ja_jp', 'id': 'id_id', 'kn': 'kn_in', 'it': 'it_it', 'is': 'is_is', 'ko': 'ko_kr', 'mi': 'mi_nz', 'my': 'my_mm', 'lv': 'lv_lv', 'mt': 'mt_mt', 'mk': 'mk_mk', 'lt': 'lt_lt', 'lb': 'lb_lu', 'ms': 'ms_my', 'mr': 'mr_in', 'lo': 'lo_la', 'mn': 'mn_mn', 'ln': 'ln_cd', 'ml': 'ml_in', 'ne': 'ne_np', 'pa': 'pa_in', 'oc': 'oc_fr', 'ps': 'ps_af', 'sd': 'sd_in', 'ro': 'ro_ro', 'pl': 'pl_pl', 'ru': 'ru_ru', 'nl': 'nl_nl', 'pt': 'pt_br', 'so': 'so_so', 'th': 'th_th', 'sw': 'sw_ke', 'sr': 'sr_rs', 'tg': 'tg_tj', 'ta': 'ta_in', 'sk': 'sk_sk', 'te': 'te_in', 'sn': 'sn_zw', 'sl': 'sl_si', 'sv': 'sv_se', 'ur': 'ur_pk', 'uk': 'uk_ua', 'yo': 'yo_ng', 'vi': 'vi_vn', 'tr': 'tr_tr', 'uz': 'uz_uz'}
     return vl107_to_fleurs_map
+
+
+def vl107_to_nistlre_map():
+    vl107_to_nistlre = {
+            "ar": "ara",
+            "en": "eng",
+            "es": "spa",
+            "zh": "zho",
+            "pt": "por",
+        }
+    return vl107_to_nistlre
