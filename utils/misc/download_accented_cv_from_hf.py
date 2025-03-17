@@ -23,15 +23,20 @@ def download_accented_dataset(lang):
         "de": "Deutschland Deutsch",
         "fr": "Français de France",
         "es": "México",
-        "it": "Tendente al siculo, ma non marcato"
+        "it": "Tendente al siculo, ma non marcato",
     }
-    majority_accent = majority_accents[lang]
-    filtered_majority = filtered_ds.filter(lambda x: x['accent'] == majority_accent)
-    filtered_minority = filtered_ds.filter(lambda x: x['accent'] != majority_accent)
+    if lang in majority_accents:
+        majority_accent = majority_accents[lang]
+        filtered_majority = filtered_ds.filter(lambda x: x['accent'] == majority_accent)
+        filtered_minority = filtered_ds.filter(lambda x: x['accent'] != majority_accent)
 
-    majority_dataset = filtered_majority.take(500)
-    minority_dataset = filtered_minority.take(4500)
-    subset = list(majority_dataset) + list(minority_dataset)
+        majority_dataset = filtered_majority.take(500)
+        minority_dataset = filtered_minority.take(4500)
+        subset = list(majority_dataset) + list(minority_dataset)
+    else:
+        subset = filtered_ds.take(5000)
+        subset = list(subset)
+        
     dataset = Dataset.from_list(subset)
     # print(f"Printing accents...")
     # accents = [x['accent'] for x in dataset]

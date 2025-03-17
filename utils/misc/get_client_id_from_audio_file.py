@@ -75,10 +75,12 @@ def get_speaker_id_from_audio_file(dataset_name, audio_file, accent=None, lang=N
         return get_speaker_id_from_audio_file_cv(audio_file)
     elif dataset_name == "edacc":
         return get_speaker_id_from_audio_file_edacc(audio_file, accent)
-    elif dataset_name == "cv_from_hf":
+    elif dataset_name in {"cv_from_hf", "cv_from_hf_l2"}:
         return get_speaker_id_from_audio_file_cv_from_hf(audio_file, lang)
     elif dataset_name == "fleurs_test":
         return get_speaker_id_from_audio_file_fleurs_test(audio_file, lang)
+    else:
+        raise ValueError(f"Unknown dataset_name: {dataset_name}")
 
 
 # # We'll get audio_file2client_id mappings for the CV dataset

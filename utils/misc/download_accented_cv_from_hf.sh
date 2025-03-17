@@ -3,7 +3,7 @@
 #$ -N download_hf
 #$ -wd /home/hltcoe/nbafna/projects/mitigating-accent-bias-in-lid/utils/misc
 #$ -m e
-#$ -t 2
+#$ -t 8
 #$ -j y -o /home/hltcoe/nbafna/projects/mitigating-accent-bias-in-lid/qsub_logs/download_accented_cv_from_hf_$TASK_ID.out
 
 # Fill out RAM/memory (same thing) request,
@@ -31,7 +31,7 @@ export TORCH_DISTRIBUTED_DEBUG=DETAIL
 WD="/home/hltcoe/nbafna/projects/mitigating-accent-bias-in-lid/utils/misc"
 cd $WD
 
-langs=("es" "it" "de" "fr")
+langs=("es" "it" "de" "fr" "hi" "zh" "ar" "ru")
 lang=${langs[$SGE_TASK_ID-1]}
 echo "Downloading $lang"
 
