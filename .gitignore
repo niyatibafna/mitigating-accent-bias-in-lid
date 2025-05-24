@@ -24,7 +24,6 @@ lid_with_phoneme_transcription/wav2vec2phoneme_test.py
 utils/wav2vec2phoneme_map/wav2vec2phoneme_map.json
 lid_with_phoneseqs/train_logs/*
 prelim_evals/qsub_logs/*
-utils/results_formatting/*
 utils/misc/*.csv
 lid_with_reps-phoneseqs/train_logs/*
 prelim_evals/pred_new/*
