@@ -16,7 +16,7 @@ See `lid_with_phoneseqs/transcribe_data.py` for transcription of data into phone
 
 ### Extracting clustered SSL units
 
-We also prepare sequence representation of the speech that consists of clustered SSL representations.
+We also prepare sequence representation of the speech that consists of clustered SSL representations, extracted from (facebook/wav2vec2-base)[https://huggingface.co/facebook/wav2vec2-base].
 See `lid_with_ssl_units/extracting_units_from_training_data.py` for extracting and clustering SSL representations.
 
 ### Extracting ECAPA-TDNN last layer representations 
