@@ -12,7 +12,7 @@ See `utils/dataloading/dataset_loader.py` for a wrapper script for loading audio
 
 ### Phoneme transcription of datasets
 
-See `lid_with_phoneseqs/transcribe_data.py` for transcription of data into phoneme sequences. This is just inference with (facebook/wav2vec2-xlsr-53-espeak-cv-ft)[https://huggingface.co/facebook/wav2vec2-xlsr-53-espeak-cv-ft].
+See `lid_with_phoneseqs/transcribe_data.py` for transcription of data into phoneme sequences. This is just inference with [facebook/wav2vec2-xlsr-53-espeak-cv-ft](https://huggingface.co/facebook/wav2vec2-xlsr-53-espeak-cv-ft).
 
 ### Extracting clustered SSL units
 
@@ -21,7 +21,7 @@ See `lid_with_ssl_units/extracting_units_from_training_data.py` for extracting a
 
 ### Extracting ECAPA-TDNN last layer representations 
 
-See `lid_with_acoustics-phoneseq/encode_and_transcribe_dataset.py` and `lid_with_reps-sslunits/encode_transcribe_and_get_ssl_units.py`. This is just inference with the ECAPA-TDNN LID model: (speechbrain/lang-id-voxlingua107-ecapa)[https://huggingface.co/speechbrain/lang-id-voxlingua107-ecapa]
+See `lid_with_acoustics-phoneseq/encode_and_transcribe_dataset.py` and `lid_with_reps-sslunits/encode_transcribe_and_get_ssl_units.py`. This is just inference with the ECAPA-TDNN LID model: [speechbrain/lang-id-voxlingua107-ecapa](https://huggingface.co/speechbrain/lang-id-voxlingua107-ecapa).
 
 ### Extracting output label distribution of ECAPA-TDNN 
 
